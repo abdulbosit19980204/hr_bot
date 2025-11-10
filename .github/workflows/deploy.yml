@@ -1,0 +1,44 @@
+name: Deploy Telegram Bot
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        working-directory: ./telegram_bot
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Deploy to server
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          echo "$SSH_PRIVATE_KEY" > private_key
+          chmod 600 private_key
+          ssh -i private_key -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'EOF'
+            cd /path/to/your/project
+            git pull origin main
+            source venv/bin/activate
+            pip install -r telegram_bot/requirements.txt
+            systemctl restart telegram-bot
+          EOF
+          rm private_key
+

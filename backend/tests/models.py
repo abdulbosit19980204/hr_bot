@@ -7,7 +7,7 @@ class Test(models.Model):
     """Test model"""
     title = models.CharField(max_length=255, verbose_name=_('Title'))
     description = models.TextField(blank=True, null=True, verbose_name=_('Description'))
-    position = models.CharField(max_length=255, blank=True, null=True, verbose_name=_('Position'))
+    positions = models.ManyToManyField('users.Position', related_name='tests', blank=True, verbose_name=_('Positions'), help_text=_('Test qaysi positionlar uchun mo\'ljallangan'))
     time_limit = models.IntegerField(default=60, help_text=_('Time limit in minutes'), verbose_name=_('Time Limit'))
     passing_score = models.IntegerField(default=60, help_text=_('Passing score in percentage'), verbose_name=_('Passing Score'))
     is_active = models.BooleanField(default=True, verbose_name=_('Is Active'))

@@ -3,11 +3,28 @@ from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
 
 
+class Position(models.Model):
+    """Position model - lavozimlar"""
+    name = models.CharField(max_length=255, unique=True, verbose_name=_('Position Name'))
+    description = models.TextField(blank=True, null=True, verbose_name=_('Description'))
+    is_open = models.BooleanField(default=True, verbose_name=_('Is Open'), help_text=_('Faqat ochiq positionlarga hujjat topshirish mumkin'))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Created at'))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_('Updated at'))
+
+    class Meta:
+        verbose_name = _('Position')
+        verbose_name_plural = _('Positions')
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
 class User(AbstractUser):
     """Custom User model with Telegram integration"""
     telegram_id = models.BigIntegerField(unique=True, null=True, blank=True, verbose_name=_('Telegram ID'))
     phone = models.CharField(max_length=20, null=True, blank=True, verbose_name=_('Phone'))
-    position = models.CharField(max_length=255, null=True, blank=True, verbose_name=_('Position'))
+    position = models.ForeignKey('Position', on_delete=models.SET_NULL, null=True, blank=True, related_name='users', verbose_name=_('Position'))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Created at'))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_('Updated at'))
 
@@ -35,4 +52,3 @@ class CV(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.file_name}"
-

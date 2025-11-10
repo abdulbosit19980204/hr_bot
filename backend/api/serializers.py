@@ -1,9 +1,19 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from users.models import CV
+from users.models import CV, Position
 from tests.models import Test, Question, AnswerOption, TestResult, UserAnswer
 
 User = get_user_model()
+
+
+class PositionSerializer(serializers.ModelSerializer):
+    """Position serializer"""
+    tests_count = serializers.IntegerField(source='tests.count', read_only=True)
+    
+    class Meta:
+        model = Position
+        fields = ['id', 'name', 'description', 'is_open', 'tests_count', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
 
 
 class AnswerOptionSerializer(serializers.ModelSerializer):
@@ -24,44 +34,64 @@ class QuestionSerializer(serializers.ModelSerializer):
 class TestSerializer(serializers.ModelSerializer):
     questions = QuestionSerializer(many=True, read_only=True)
     questions_count = serializers.IntegerField(source='questions.count', read_only=True)
+    positions = PositionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Test
-        fields = ['id', 'title', 'description', 'position', 'time_limit', 'passing_score', 
+        fields = ['id', 'title', 'description', 'positions', 'time_limit', 'passing_score', 
                   'is_active', 'questions', 'questions_count', 'created_at', 'updated_at']
         read_only_fields = ['created_at', 'updated_at']
 
 
 class TestListSerializer(serializers.ModelSerializer):
     questions_count = serializers.IntegerField(source='questions.count', read_only=True)
+    positions = PositionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Test
-        fields = ['id', 'title', 'description', 'position', 'time_limit', 'passing_score', 
+        fields = ['id', 'title', 'description', 'positions', 'time_limit', 'passing_score', 
                   'is_active', 'questions_count', 'created_at']
 
 
 class UserSerializer(serializers.ModelSerializer):
+    position = PositionSerializer(read_only=True)
+    position_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+
     class Meta:
         model = User
         fields = ['id', 'username', 'first_name', 'last_name', 'email', 'phone', 
-                  'position', 'telegram_id', 'created_at']
+                  'position', 'position_id', 'telegram_id', 'created_at']
         read_only_fields = ['created_at']
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
+    position_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    
     class Meta:
         model = User
         fields = ['username', 'first_name', 'last_name', 'email', 'phone', 
-                  'position', 'telegram_id', 'password']
+                  'telegram_id', 'password', 'position_id']
         extra_kwargs = {'password': {'write_only': True}}
 
     def create(self, validated_data):
         password = validated_data.pop('password', None)
+        position_id = validated_data.pop('position_id', None)
+        
         if not password:
             password = User.objects.make_random_password()
+        
         user = User.objects.create_user(**validated_data)
         user.set_password(password)
+        
+        # Set position if provided and valid (faqat ochiq positionlar)
+        if position_id:
+            try:
+                position = Position.objects.get(id=position_id, is_open=True)
+                user.position = position
+            except Position.DoesNotExist:
+                # Position topilmadi yoki yopiq - position o'rnatilmaydi
+                pass
+        
         user.save()
         return user
 

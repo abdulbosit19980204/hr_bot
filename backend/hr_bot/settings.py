@@ -158,11 +158,21 @@ SIMPLE_JWT = {
 }
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = env.list(
-    'CORS_ALLOWED_ORIGINS',
-    default=['http://localhost:3000', 'http://localhost:5173']
-)
-CORS_ALLOW_CREDENTIALS = True
+# Development uchun barcha origin'larni ruxsat berish
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+    CORS_ALLOW_CREDENTIALS = True
+else:
+    CORS_ALLOWED_ORIGINS = env.list(
+        'CORS_ALLOWED_ORIGINS',
+        default=[
+            'http://localhost:3000',
+            'http://localhost:5173',
+            'http://127.0.0.1:3000',
+            'http://127.0.0.1:5173',
+        ]
+    )
+    CORS_ALLOW_CREDENTIALS = True
 
 # Telegram Bot settings
 TELEGRAM_BOT_TOKEN = env('TELEGRAM_BOT_TOKEN', default='')

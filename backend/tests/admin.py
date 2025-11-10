@@ -21,14 +21,19 @@ class TestImportForm(forms.Form):
 
 @admin.register(Test)
 class TestAdmin(admin.ModelAdmin):
-    list_display = ['title', 'position', 'time_limit', 'passing_score', 'is_active', 'questions_count', 'created_at']
-    list_filter = ['is_active', 'position', 'created_at']
-    search_fields = ['title', 'description', 'position']
+    list_display = ['title', 'positions_display', 'time_limit', 'passing_score', 'is_active', 'questions_count', 'created_at']
+    list_filter = ['is_active', 'positions', 'created_at']
+    search_fields = ['title', 'description']
+    filter_horizontal = ['positions']
     fieldsets = (
-        ('Basic Info', {'fields': ('title', 'description', 'position')}),
+        ('Basic Info', {'fields': ('title', 'description', 'positions')}),
         ('Settings', {'fields': ('time_limit', 'passing_score', 'is_active')}),
     )
     readonly_fields = ['created_at', 'updated_at']
+    
+    def positions_display(self, obj):
+        return ", ".join([p.name for p in obj.positions.all()[:3]])
+    positions_display.short_description = 'Positions'
     change_list_template = 'admin/tests/test_change_list.html'
 
     def questions_count(self, obj):
@@ -44,6 +49,50 @@ class TestAdmin(admin.ModelAdmin):
         return custom_urls + urls
 
     def import_excel(self, request):
+        # Example template yuklab olish
+        if request.GET.get('download_template') == '1':
+            response = HttpResponse(
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response['Content-Disposition'] = 'attachment; filename="test_template.xlsx"'
+            
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Test Template"
+            
+            # Test info headers
+            ws.cell(row=1, column=1).value = "Title:"
+            ws.cell(row=2, column=1).value = "Description:"
+            ws.cell(row=3, column=1).value = "Position:"
+            ws.cell(row=4, column=1).value = "Time Limit (minutes):"
+            ws.cell(row=5, column=1).value = "Passing Score (%):"
+            
+            # Example test data
+            ws.cell(row=1, column=2).value = "Example Test"
+            ws.cell(row=2, column=2).value = "This is an example test description"
+            ws.cell(row=3, column=2).value = "Software Engineer"
+            ws.cell(row=4, column=2).value = 60
+            ws.cell(row=5, column=2).value = 70
+            
+            # Question headers (row 7)
+            headers = ['Question', 'Option 1', 'Option 2', 'Option 3', 'Option 4', 'Correct Answer (1-4)']
+            for col, header in enumerate(headers, start=1):
+                ws.cell(row=7, column=col).value = header
+            
+            # Example questions
+            example_questions = [
+                ["What is Python?", "A programming language", "A snake", "A framework", "A database", 1],
+                ["What is Django?", "A web framework", "A database", "A language", "A tool", 1],
+                ["What is REST API?", "An API architecture", "A database", "A language", "A framework", 1],
+            ]
+            
+            for row_idx, question_data in enumerate(example_questions, start=8):
+                for col_idx, value in enumerate(question_data, start=1):
+                    ws.cell(row=row_idx, column=col_idx).value = value
+            
+            wb.save(response)
+            return response
+        
         if request.method == 'POST':
             form = TestImportForm(request.POST, request.FILES)
             if form.is_valid():
@@ -196,7 +245,7 @@ class UserAnswerInline(admin.TabularInline):
 @admin.register(TestResult)
 class TestResultAdmin(admin.ModelAdmin):
     list_display = ['user', 'test', 'score', 'correct_answers', 'total_questions', 'is_passed_display', 'completed_at']
-    list_filter = ['test', 'completed_at', 'test__position']
+    list_filter = ['test', 'completed_at', 'user__position']
     search_fields = ['user__username', 'user__first_name', 'user__last_name', 'test__title']
     readonly_fields = ['started_at', 'completed_at', 'time_taken']
     inlines = [UserAnswerInline]

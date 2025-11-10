@@ -3,10 +3,11 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import (
     TestViewSet, QuestionViewSet, UserViewSet,
-    CVViewSet, TestResultViewSet, StatisticsView
+    CVViewSet, TestResultViewSet, StatisticsView, PositionViewSet
 )
 
 router = DefaultRouter()
+router.register(r'positions', PositionViewSet, basename='position')
 router.register(r'tests', TestViewSet, basename='test')
 router.register(r'questions', QuestionViewSet, basename='question')
 router.register(r'users', UserViewSet, basename='user')

@@ -1,12 +1,24 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, CV
+from .models import User, CV, Position
+
+
+@admin.register(Position)
+class PositionAdmin(admin.ModelAdmin):
+    list_display = ['name', 'is_open', 'tests_count', 'created_at']
+    list_filter = ['is_open', 'created_at']
+    search_fields = ['name', 'description']
+    readonly_fields = ['created_at', 'updated_at']
+    
+    def tests_count(self, obj):
+        return obj.tests.count()
+    tests_count.short_description = 'Tests'
 
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     list_display = ['username', 'first_name', 'last_name', 'email', 'phone', 'position', 'telegram_id', 'is_staff', 'created_at']
-    list_filter = ['is_staff', 'is_superuser', 'created_at']
+    list_filter = ['is_staff', 'is_superuser', 'position', 'created_at']
     search_fields = ['username', 'first_name', 'last_name', 'email', 'phone', 'telegram_id']
     fieldsets = BaseUserAdmin.fieldsets + (
         ('Additional Info', {'fields': ('telegram_id', 'phone', 'position')}),
