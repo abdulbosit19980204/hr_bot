@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
@@ -12,17 +13,28 @@ import redis.asyncio as redis
 from dotenv import load_dotenv
 import aiohttp
 
-# Load environment variables
-load_dotenv()
-
-# Configure logging
+# Configure logging first
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+try:
+    from test_handlers import (
+        start_telegram_test, process_answer, request_cv_upload
+    )
+except ImportError:
+    logger.warning("test_handlers module not found, Telegram test functionality disabled")
+    start_telegram_test = None
+    process_answer = None
+    request_cv_upload = None
+
+# Load environment variables
+load_dotenv()
 
 # Bot configuration
 BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
 API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api')
 WEBAPP_URL = os.getenv('TELEGRAM_WEBAPP_URL', 'https://yourdomain.com/webapp')
+ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID', '')  # Admin guruh yoki kanal ID
 
 # Initialize bot and dispatcher
 bot = Bot(token=BOT_TOKEN)
@@ -48,6 +60,128 @@ else:
 dp = Dispatcher(storage=storage)
 
 
+# Admin notifications
+async def send_to_admin(message_text: str, parse_mode: str = "HTML"):
+    """Send message to admin group/channel"""
+    if not ADMIN_CHAT_ID:
+        logger.warning("ADMIN_CHAT_ID not configured, skipping admin notification")
+        return
+    
+    try:
+        chat_id = int(ADMIN_CHAT_ID) if ADMIN_CHAT_ID.lstrip('-').isdigit() else ADMIN_CHAT_ID
+        await bot.send_message(chat_id=chat_id, text=message_text, parse_mode=parse_mode)
+        logger.info(f"Message sent to admin chat: {chat_id}")
+    except Exception as e:
+        logger.error(f"Error sending message to admin: {e}", exc_info=True)
+
+
+async def notify_new_candidate(user_data: dict, position_name: str = None):
+    """Notify admin about new candidate registration"""
+    telegram_id = user_data.get('telegram_id', 'Noma\'lum')
+    first_name = user_data.get('first_name', '')
+    last_name = user_data.get('last_name', '')
+    email = user_data.get('email', 'Belgilanmagan')
+    phone = user_data.get('phone', 'Belgilanmagan')
+    
+    message = (
+        "🆕 <b>Yangi kandidat ro'yxatdan o'tdi</b>\n\n"
+        f"👤 <b>Ism:</b> {first_name} {last_name}\n"
+        f"🆔 <b>Telegram ID:</b> {telegram_id}\n"
+        f"📧 <b>Email:</b> {email}\n"
+        f"📱 <b>Telefon:</b> {phone}\n"
+    )
+    
+    if position_name:
+        message += f"💼 <b>Lavozim:</b> {position_name}\n"
+    
+    message += f"\n⏰ <b>Vaqt:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    
+    await send_to_admin(message)
+
+
+async def notify_test_start(user_data: dict, test_title: str, questions_count: int):
+    """Notify admin about test start"""
+    telegram_id = user_data.get('telegram_id', 'Noma\'lum')
+    first_name = user_data.get('first_name', '')
+    last_name = user_data.get('last_name', '')
+    
+    message = (
+        "🚀 <b>Test boshlandi</b>\n\n"
+        f"👤 <b>Kandidat:</b> {first_name} {last_name}\n"
+        f"🆔 <b>Telegram ID:</b> {telegram_id}\n"
+        f"📝 <b>Test:</b> {test_title}\n"
+        f"📊 <b>Savollar soni:</b> {questions_count} ta\n"
+        f"⏰ <b>Vaqt:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+    )
+    
+    await send_to_admin(message)
+
+
+async def notify_test_result(user_data: dict, test_title: str, result_data: dict):
+    """Notify admin about test result"""
+    telegram_id = user_data.get('telegram_id', 'Noma\'lum')
+    first_name = user_data.get('first_name', '')
+    last_name = user_data.get('last_name', '')
+    
+    score = result_data.get('score', 0)
+    total_questions = result_data.get('total_questions', 0)
+    correct_answers = result_data.get('correct_answers', 0)
+    is_passed = result_data.get('is_passed', False)
+    time_taken = result_data.get('time_taken', 0)
+    
+    status_emoji = "✅" if is_passed else "❌"
+    status_text = "O'tdi" if is_passed else "O'tmadi"
+    
+    message = (
+        f"{status_emoji} <b>Test natijasi</b>\n\n"
+        f"👤 <b>Kandidat:</b> {first_name} {last_name}\n"
+        f"🆔 <b>Telegram ID:</b> {telegram_id}\n"
+        f"📝 <b>Test:</b> {test_title}\n\n"
+        f"📊 <b>Natijalar:</b>\n"
+        f"• Jami savollar: {total_questions}\n"
+        f"• To'g'ri javoblar: {correct_answers}\n"
+        f"• Ball: {score}%\n"
+        f"• Vaqt: {time_taken // 60} daqiqa {time_taken % 60} soniya\n"
+        f"• Holat: {status_text}\n"
+        f"⏰ <b>Yakunlangan vaqt:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+    )
+    
+    await send_to_admin(message)
+
+
+async def notify_error(error_type: str, error_message: str, user_id: int = None, context: dict = None):
+    """Notify admin about errors"""
+    # Limit error message length (Telegram max 4096 chars)
+    max_message_length = 3500
+    error_msg_short = error_message[:500] if len(error_message) > 500 else error_message
+    
+    message = (
+        "⚠️ <b>Xatolik</b>\n"
+        f"🔴 <b>Turi:</b> {error_type}\n"
+        f"📝 <b>Xabar:</b> {error_msg_short}\n"
+    )
+    
+    if user_id:
+        message += f"👤 <b>User ID:</b> {user_id}\n"
+    
+    if context:
+        # Limit context to important fields only
+        important_fields = ['test_id', 'test_title', 'function', 'status_code']
+        context_str = ""
+        for key in important_fields:
+            if key in context:
+                context_str += f"• {key}: {context[key]}\n"
+        
+        if context_str:
+            message += f"\n<b>Ma'lumot:</b>\n{context_str}"
+    
+    # Truncate if too long
+    if len(message) > max_message_length:
+        message = message[:max_message_length] + "..."
+    
+    await send_to_admin(message)
+
+
 # States
 class UserRegistration(StatesGroup):
     waiting_for_first_name = State()
@@ -64,6 +198,13 @@ class ProfileEdit(StatesGroup):
     editing_phone = State()
     editing_email = State()
     editing_position = State()
+
+
+class TestTaking(StatesGroup):
+    selecting_mode = State()
+    answering_question = State()
+    waiting_for_answer = State()
+    completed = State()
 
 
 async def get_or_create_user(telegram_id: int, first_name: str, last_name: str = None):
@@ -229,6 +370,7 @@ async def show_positions(message: types.Message, state: FSMContext):
                     await state.clear()
         except Exception as e:
             logger.error(f"Error loading positions: {e}", exc_info=True)
+            await notify_error("Position yuklash xatoligi", str(e), user_id=message.from_user.id, context={'function': 'show_positions'})
             await message.answer("❌ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.")
             await state.clear()
 
@@ -280,6 +422,12 @@ async def process_position_selection(callback: types.CallbackQuery, state: FSMCo
                             f"Endi testni boshlashingiz mumkin."
                         )
                         
+                        # Notify admin about new candidate
+                        try:
+                            await notify_new_candidate(user, position_name)
+                        except Exception as e:
+                            logger.error(f"Error notifying admin about new candidate: {e}", exc_info=True)
+                        
                         # Show tests for selected position
                         await show_tests_for_position(callback.message, position_id, user)
                     else:
@@ -290,6 +438,7 @@ async def process_position_selection(callback: types.CallbackQuery, state: FSMCo
                         )
     except Exception as e:
         logger.error(f"Error in process_position_selection: {e}", exc_info=True)
+        await notify_error("Position tanlash xatoligi", str(e), user_id=callback.from_user.id, context={'function': 'process_position_selection'})
         await callback.answer("❌ Xatolik yuz berdi", show_alert=True)
     finally:
         await state.clear()
@@ -353,7 +502,73 @@ async def show_tests_for_position(message: types.Message, position_id: int, user
                     )
         except Exception as e:
             logger.error(f"Error in show_tests_for_position: {e}", exc_info=True)
+            await notify_error("Testlar ro'yxatini yuklash xatoligi", str(e), user_id=message.from_user.id, context={'function': 'show_tests_for_position'})
             await message.answer("❌ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.")
+
+
+async def show_trial_tests(message: types.Message, position_id: int, user_data: dict):
+    """Show trial tests for position - only Telegram mode"""
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+            f"{API_BASE_URL}/tests/",
+            params={'position_id': position_id, 'test_mode': 'telegram'}
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                tests = data.get('results', []) if isinstance(data, dict) else data
+                
+                if not tests or len(tests) == 0:
+                    await message.answer(
+                        "ℹ️ Sizning lavozimingiz uchun trial testlar mavjud emas."
+                    )
+                    return
+                
+                # Filter tests that support Telegram (trial test faqat Telegram orqali)
+                trial_tests = [t for t in tests if t.get('test_mode') in ['telegram', 'both']]
+                
+                if not trial_tests:
+                    await message.answer(
+                        "ℹ️ Sizning lavozimingiz uchun trial testlar mavjud emas."
+                    )
+                    return
+                
+                # Get user's trial tests taken
+                trial_tests_taken = user_data.get('trial_tests_taken', []) or []
+                
+                keyboard_buttons = []
+                for test in trial_tests[:10]:  # Show max 10 tests
+                    test_id = test.get('id')
+                    test_title = test.get('title', 'Test')
+                    trial_count = test.get('trial_questions_count', 10)
+                    is_taken = test_id in trial_tests_taken
+                    
+                    button_text = f"🧪 {test_title} ({trial_count} savol)"
+                    if is_taken:
+                        button_text += " ✅"
+                    
+                    keyboard_buttons.append([
+                        InlineKeyboardButton(
+                            text=button_text,
+                            callback_data=f"trial_test_{test_id}"
+                        )
+                    ])
+                
+                keyboard_buttons.append([
+                    InlineKeyboardButton(text="🔙 Asosiy menyu", callback_data="menu_back")
+                ])
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+                
+                text = (
+                    "🧪 <b>Trial Testlar</b>\n\n"
+                    "Har bir testdan bir marta trial test yechishingiz mumkin.\n"
+                    "Trial testda 10 ta savol beriladi.\n\n"
+                    "Testni tanlang:"
+                )
+                
+                await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+            else:
+                await message.answer("❌ Xatolik yuz berdi.")
 
 
 async def show_main_menu(message: types.Message, user_data: dict = None):
@@ -382,6 +597,7 @@ async def show_main_menu(message: types.Message, user_data: dict = None):
     # Create menu keyboard
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📝 Test topshirish", callback_data="menu_apply")],
+        [InlineKeyboardButton(text="🧪 Trial test", callback_data="menu_trial")],
         [InlineKeyboardButton(text="👤 Profilni tahrirlash", callback_data="menu_edit_profile")],
         [InlineKeyboardButton(text="📊 Natijalarim", callback_data="menu_results")],
         [InlineKeyboardButton(text="ℹ️ Profil ma'lumotlari", callback_data="menu_profile_info")],
@@ -405,73 +621,331 @@ async def show_main_menu(message: types.Message, user_data: dict = None):
     await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
 
-@dp.callback_query(lambda c: c.data.startswith("test_"))
+@dp.callback_query(lambda c: c.data.startswith("test_") and not c.data.startswith("test_webapp_") and not c.data.startswith("test_telegram_"))
 async def process_test_selection(callback: types.CallbackQuery, state: FSMContext):
-    """Handle test selection"""
+    """Handle test selection - test mode'ga qarab WebApp yoki Telegram"""
     test_id = callback.data.split("_")[1]
+    logger.info(f"Processing test_ callback for test_id: {test_id}, callback_data: {callback.data}")
     
     # Get test details
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{API_BASE_URL}/tests/{test_id}/") as resp:
+            logger.info(f"API response status: {resp.status} for test_id: {test_id}")
             if resp.status == 200:
                 test = await resp.json()
+                logger.info(f"Test data received: {test}")
+                if not test or not test.get('id'):
+                    logger.warning(f"Test not found or inactive: test_id={test_id}, test_data={test}")
+                    await callback.answer("❌ Test topilmadi yoki faol emas", show_alert=True)
+                    return
+                
                 test_title = test.get('title', 'Test')
                 test_description = test.get('description', '')
                 time_limit = test.get('time_limit', 60)
+                passing_score = test.get('passing_score', 60)
+                test_mode = test.get('test_mode', 'both')
+                random_count = test.get('random_questions_count', 0)
+                questions_count = test.get('questions_count', 0)
                 
-                # Create WebApp button
+                # Test mode'ga qarab tanlash
+                if test_mode == 'telegram':
+                    # Faqat Telegram
+                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="🚀 Testni boshlash", callback_data=f"start_telegram_test_{test_id}")],
+                        [InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_test")]
+                    ])
+                    await callback.message.edit_text(
+                        f"📝 <b>{test_title}</b>\n\n"
+                        f"{test_description}\n\n"
+                        f"⏱ Vaqt: {time_limit} daqiqa\n"
+                        f"📊 Savollar: {random_count if random_count > 0 else questions_count} ta\n"
+                        f"✅ O'tish foizi: {passing_score}%\n\n"
+                        f"Test Telegram orqali yechiladi. Testni boshlash uchun quyidagi tugmani bosing:",
+                        reply_markup=keyboard,
+                        parse_mode="HTML"
+                    )
+                    await state.update_data(test_id=test_id, test_data=test, current_question=0, answers=[])
+                    await state.set_state(TestTaking.selecting_mode)
+                    
+                elif test_mode == 'webapp':
+                    # Faqat WebApp
+                    webapp_url = f"{WEBAPP_URL}?test_id={test_id}&user_id={callback.from_user.id}"
+                    use_webapp = webapp_url.startswith('https://')
+                    
+                    try:
+                        if use_webapp:
+                            # HTTPS - use WebApp button
+                            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(
+                                    text="🚀 Testni boshlash",
+                                    web_app=WebAppInfo(url=webapp_url)
+                                )]
+                            ])
+                        else:
+                            # HTTP - use regular URL button (still a button, not a link)
+                            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(
+                                    text="🚀 Testni boshlash",
+                                    url=webapp_url
+                                )]
+                            ])
+                        
+                        passing_score = test.get('passing_score', 60)
+                        
+                        message_text = (
+                            f"📝 <b>{test_title}</b>\n\n"
+                            f"{test_description}\n\n"
+                            f"⏱ Vaqt: {time_limit} daqiqa\n"
+                        )
+                        
+                        if random_count > 0 or questions_count > 0:
+                            message_text += f"📊 Savollar: {random_count if random_count > 0 else questions_count} ta\n"
+                        
+                        message_text += f"✅ O'tish foizi: {passing_score}%\n\n"
+                        
+                        if not use_webapp:
+                            message_text += "⚠️ <b>Development rejimida</b>\n\n"
+                        
+                        message_text += "Testni boshlash uchun quyidagi tugmani bosing:"
+                        
+                        await callback.message.edit_text(
+                            message_text,
+                            reply_markup=keyboard,
+                            parse_mode="HTML"
+                        )
+                    except Exception as e:
+                        logger.error(f"Error creating button: {e}")
+                        error_msg = str(e)
+                        # Notify admin about error
+                        await notify_error(
+                            "WebApp tugma yaratish xatoligi",
+                            error_msg,
+                            user_id=callback.from_user.id,
+                            context={
+                                'test_id': test_id,
+                                'test_title': test_title,
+                                'webapp_url': webapp_url,
+                                'function': 'process_test_webapp'
+                            }
+                        )
+                        await callback.message.edit_text(
+                            f"📝 <b>{test_title}</b>\n\n"
+                            f"⚠️ Xatolik yuz berdi.",
+                            parse_mode="HTML"
+                        )
+                else:
+                    # Both - tanlash imkoniyati
+                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="🌐 WebApp orqali", callback_data=f"test_webapp_{test_id}")],
+                        [InlineKeyboardButton(text="💬 Telegram orqali", callback_data=f"test_telegram_{test_id}")],
+                    ])
+                    passing_score = test.get('passing_score', 60)
+                    
+                    await callback.message.edit_text(
+                        f"📝 <b>{test_title}</b>\n\n"
+                        f"{test_description}\n\n"
+                        f"⏱ Vaqt: {time_limit} daqiqa\n"
+                        f"📊 Savollar: {random_count if random_count > 0 else questions_count} ta\n"
+                        f"✅ O'tish foizi: {passing_score}%\n\n"
+                        f"Testni qayerda yechmoqchisiz?",
+                        reply_markup=keyboard,
+                        parse_mode="HTML"
+                    )
+            else:
+                await callback.answer("❌ Test topilmadi", show_alert=True)
+    
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("test_webapp_"))
+async def process_test_webapp(callback: types.CallbackQuery):
+    """Handle WebApp test selection"""
+    # test_webapp_3 -> ['test', 'webapp', '3'] -> test_id = '3'
+    parts = callback.data.split("_")
+    if len(parts) >= 3:
+        test_id = parts[2]
+    else:
+        await callback.answer("❌ Noto'g'ri test ID", show_alert=True)
+        return
+    logger.info(f"Processing test_webapp_ callback for test_id: {test_id}, callback_data: {callback.data}")
+    
+    # Get test details
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{API_BASE_URL}/tests/{test_id}/") as resp:
+            logger.info(f"API response status: {resp.status} for test_id: {test_id}")
+            if resp.status == 200:
+                test = await resp.json()
+                logger.info(f"Test data received: {test}")
+                if not test or not test.get('id'):
+                    logger.warning(f"Test not found or inactive: test_id={test_id}, test_data={test}")
+                    await callback.answer("❌ Test topilmadi yoki faol emas", show_alert=True)
+                    return
+                
+                test_title = test.get('title', 'Test')
+                test_description = test.get('description', '')
+                time_limit = test.get('time_limit', 60)
+                passing_score = test.get('passing_score', 60)
+                random_count = test.get('random_questions_count', 0)
+                questions_count = test.get('questions_count', 0)
+                
+                # Create WebApp URL
                 webapp_url = f"{WEBAPP_URL}?test_id={test_id}&user_id={callback.from_user.id}"
-                
-                # Check if URL is HTTPS (required by Telegram)
                 use_webapp = webapp_url.startswith('https://')
                 
-                if use_webapp:
-                    # Use WebApp button for HTTPS URLs
-                    try:
+                try:
+                    # Build message text first
+                    message_text = (
+                        f"📝 <b>{test_title}</b>\n\n"
+                        f"{test_description}\n\n"
+                        f"⏱ Vaqt: {time_limit} daqiqa\n"
+                    )
+                    
+                    if random_count > 0 or questions_count > 0:
+                        message_text += f"📊 Savollar: {random_count if random_count > 0 else questions_count} ta\n"
+                    
+                    message_text += f"✅ O'tish foizi: {passing_score}%\n\n"
+                    
+                    if use_webapp:
+                        # HTTPS - use WebApp button
                         keyboard = InlineKeyboardMarkup(inline_keyboard=[
                             [InlineKeyboardButton(
                                 text="🚀 Testni boshlash",
                                 web_app=WebAppInfo(url=webapp_url)
                             )]
                         ])
-                        
-                        await callback.message.edit_text(
-                            f"📝 <b>{test_title}</b>\n\n"
-                            f"{test_description}\n\n"
-                            f"⏱ Vaqt: {time_limit} daqiqa\n\n"
-                            f"Testni boshlash uchun quyidagi tugmani bosing:",
-                            reply_markup=keyboard,
-                            parse_mode="HTML"
-                        )
-                    except Exception as e:
-                        logger.error(f"Error creating WebApp button: {e}")
-                        # Fallback to text message
-                        await callback.message.edit_text(
-                            f"📝 <b>{test_title}</b>\n\n"
-                            f"{test_description}\n\n"
-                            f"⏱ Vaqt: {time_limit} daqiqa\n\n"
-                            f"⚠️ Xatolik yuz berdi. Iltimos, keyinroq urinib ko'ring.",
-                            parse_mode="HTML"
-                        )
-                else:
-                    # HTTP URL uchun button o'rniga oddiy matn yuborish
-                    # Telegram HTTP URL'larni button'da qabul qilmaydi
-                    # Linkni HTML formatda yuborish (bosiladigan)
+                        message_text += "Testni boshlash uchun quyidagi tugmani bosing:"
+                    else:
+                        # HTTP - Telegram HTTP URL'larni qabul qilmaydi, shuning uchun oddiy matn link ko'rsatamiz
+                        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                            [InlineKeyboardButton(text="🔙 Orqaga", callback_data="menu_back")]
+                        ])
+                        message_text += "⚠️ <b>Development rejimida</b>\n\n"
+                        message_text += f"Testni boshlash uchun quyidagi linkni brauzerda oching:\n<a href=\"{webapp_url}\">🚀 Testni boshlash</a>"
+                    
+                    await callback.message.edit_text(
+                        message_text,
+                        reply_markup=keyboard,
+                        parse_mode="HTML"
+                    )
+                except Exception as e:
+                    logger.error(f"Error creating button: {e}")
+                    error_msg = str(e)
+                    # Notify admin about error
+                    await notify_error(
+                        "WebApp tugma yaratish xatoligi",
+                        error_msg,
+                        user_id=callback.from_user.id,
+                        context={
+                            'test_id': test_id,
+                            'test_title': test_title,
+                            'webapp_url': webapp_url,
+                            'function': 'process_test_webapp'
+                        }
+                    )
                     await callback.message.edit_text(
                         f"📝 <b>{test_title}</b>\n\n"
-                        f"{test_description}\n\n"
-                        f"⏱ Vaqt: {time_limit} daqiqa\n\n"
-                        f"⚠️ <b>Development rejimida</b>\n\n"
-                        f"Testni boshlash uchun quyidagi linkni bosing:\n"
-                        f"<a href=\"{webapp_url}\">🚀 Testni boshlash</a>\n\n"
-                        f"Yoki linkni nusxalab brauzerda oching:\n"
-                        f"<code>{webapp_url}</code>",
-                        parse_mode="HTML",
-                        disable_web_page_preview=True
+                        f"⚠️ Xatolik yuz berdi.",
+                        parse_mode="HTML"
                     )
             else:
                 await callback.answer("❌ Test topilmadi", show_alert=True)
     
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("test_telegram_"))
+async def process_test_telegram(callback: types.CallbackQuery, state: FSMContext):
+    """Handle Telegram test selection"""
+    # test_telegram_3 -> ['test', 'telegram', '3'] -> test_id = '3'
+    parts = callback.data.split("_")
+    if len(parts) >= 3:
+        test_id = parts[2]
+    else:
+        await callback.answer("❌ Noto'g'ri test ID", show_alert=True)
+        return
+    logger.info(f"Processing test_telegram_ callback for test_id: {test_id}, callback_data: {callback.data}")
+    
+    # Get test details
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{API_BASE_URL}/tests/{test_id}/") as resp:
+            logger.info(f"API response status: {resp.status} for test_id: {test_id}")
+            if resp.status == 200:
+                test = await resp.json()
+                logger.info(f"Test data received: {test}")
+                if not test or not test.get('id'):
+                    logger.warning(f"Test not found or inactive: test_id={test_id}, test_data={test}")
+                    await callback.answer("❌ Test topilmadi yoki faol emas", show_alert=True)
+                    return
+                
+                test_title = test.get('title', 'Test')
+                test_description = test.get('description', '')
+                time_limit = test.get('time_limit', 60)
+                passing_score = test.get('passing_score', 60)
+                random_count = test.get('random_questions_count', 0)
+                questions_count = test.get('questions_count', 0)
+                
+                # Telegram test mode
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🚀 Testni boshlash", callback_data=f"start_telegram_test_{test_id}")],
+                    [InlineKeyboardButton(text="❌ Bekor qilish", callback_data="cancel_test")]
+                ])
+                await callback.message.edit_text(
+                    f"📝 <b>{test_title}</b>\n\n"
+                    f"{test_description}\n\n"
+                    f"⏱ Vaqt: {time_limit} daqiqa\n"
+                    f"📊 Savollar: {random_count if random_count > 0 else questions_count} ta\n"
+                    f"✅ O'tish foizi: {passing_score}%\n\n"
+                    f"Test Telegram orqali yechiladi. Testni boshlash uchun quyidagi tugmani bosing:",
+                    reply_markup=keyboard,
+                    parse_mode="HTML"
+                )
+                await state.update_data(test_id=test_id, test_data=test, current_question=0, answers=[])
+                await state.set_state(TestTaking.selecting_mode)
+            else:
+                await callback.answer("❌ Test topilmadi", show_alert=True)
+    
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("start_telegram_test_"))
+async def handle_start_telegram_test(callback: types.CallbackQuery, state: FSMContext):
+    """Handle start telegram test"""
+    if start_telegram_test:
+        # Save notify_callback to state
+        await state.update_data(notify_callback=notify_test_result, notify_error_callback=notify_error, is_trial=False)
+        await start_telegram_test(callback, state, notify_callback=notify_test_result, notify_start_callback=notify_test_start, notify_error_callback=notify_error)
+    else:
+        await callback.answer("❌ Telegram test funksiyasi mavjud emas", show_alert=True)
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("start_trial_test_"))
+async def handle_start_trial_test(callback: types.CallbackQuery, state: FSMContext):
+    """Handle start trial test - only Telegram mode"""
+    if start_telegram_test:
+        # Save notify_callback to state and mark as trial
+        await state.update_data(notify_callback=notify_test_result, notify_error_callback=notify_error, is_trial=True)
+        await start_telegram_test(callback, state, notify_callback=notify_test_result, notify_start_callback=notify_test_start, notify_error_callback=notify_error)
+    else:
+        await callback.answer("❌ Telegram test funksiyasi mavjud emas", show_alert=True)
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("answer_"))
+async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
+    """Handle answer to question"""
+    if process_answer:
+        await process_answer(callback, state)
+    else:
+        await callback.answer("❌ Javobni qayta ishlash funksiyasi mavjud emas", show_alert=True)
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data == "cancel_test")
+async def cancel_test(callback: types.CallbackQuery, state: FSMContext):
+    """Cancel test"""
+    await state.clear()
+    await callback.message.edit_text("❌ Test bekor qilindi.")
     await callback.answer()
 
 
@@ -480,7 +954,47 @@ async def cmd_menu(message: types.Message):
     """Show main menu"""
     user = message.from_user
     user_data = await get_or_create_user(user.id, user.first_name, user.last_name)
+    
+    # Check if user is blocked
+    if user_data and user_data.get('is_blocked'):
+        await message.answer(
+            f"❌ <b>Siz block qilingansiz!</b>\n\n"
+            f"Sabab: {user_data.get('blocked_reason', 'Noma\'lum sabab')}\n\n"
+            f"Vakansiyangiz ko'rib chiqishdan to'xtatilgan.",
+            parse_mode="HTML"
+        )
+        return
+    
     await show_main_menu(message, user_data)
+
+
+@dp.message(Command("trial"))
+async def cmd_trial(message: types.Message):
+    """Show trial tests menu"""
+    user = message.from_user
+    user_data = await get_or_create_user(user.id, user.first_name, user.last_name)
+    
+    if not user_data or not user_data.get('position'):
+        await message.answer(
+            "⚠️ Sizning profilingiz to'liq emas.\n"
+            "Iltimos, /start buyrug'ini yuborib profilingizni to'ldiring."
+        )
+        return
+    
+    # Get user position
+    position = user_data.get('position')
+    if isinstance(position, dict):
+        position_id = position.get('id')
+    else:
+        position_id = None
+    
+    if position_id:
+        await show_trial_tests(message, position_id, user_data)
+    else:
+        await message.answer(
+            "⚠️ Sizning lavozimingiz belgilanmagan.\n"
+            "Iltimos, /start buyrug'ini yuborib profilingizni to'ldiring."
+        )
 
 
 @dp.message(Command("apply"))
@@ -731,13 +1245,144 @@ async def menu_profile_info(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(lambda c: c.data == "menu_back")
-async def menu_back(callback: types.CallbackQuery):
-    """Back to main menu"""
+@dp.callback_query(lambda c: c.data == "menu_trial")
+async def menu_trial(callback: types.CallbackQuery):
+    """Show trial tests menu"""
     user = callback.from_user
     user_data = await get_or_create_user(user.id, user.first_name, user.last_name)
-    await callback.message.delete()
+    
+    if not user_data or not user_data.get('position'):
+        await callback.answer("⚠️ Profilingiz to'liq emas", show_alert=True)
+        return
+    
+    position = user_data.get('position')
+    if isinstance(position, dict):
+        position_id = position.get('id')
+    else:
+        position_id = None
+    
+    if position_id:
+        await show_trial_tests(callback.message, position_id, user_data)
+    else:
+        await callback.answer("⚠️ Lavozimingiz belgilanmagan", show_alert=True)
+    
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("trial_test_"))
+async def handle_trial_test(callback: types.CallbackQuery, state: FSMContext):
+    """Handle trial test selection - only Telegram mode"""
+    test_id = callback.data.split("_")[2]
+    
+    # Get test details
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{API_BASE_URL}/tests/{test_id}/") as resp:
+            if resp.status == 200:
+                test = await resp.json()
+                test_title = test.get('title', 'Test')
+                trial_count = test.get('trial_questions_count', 10)
+                time_limit = test.get('time_limit', 60)
+                test_mode = test.get('test_mode', 'both')
+                
+                # Check if test supports Telegram
+                if test_mode not in ['telegram', 'both']:
+                    await callback.answer(
+                        "⚠️ Bu test faqat WebApp orqali ishlaydi. Trial test faqat Telegram orqali mavjud.",
+                        show_alert=True
+                    )
+                    return
+                
+                # Check if user already took trial test
+                user_data = await get_or_create_user(
+                    callback.from_user.id, 
+                    callback.from_user.first_name, 
+                    callback.from_user.last_name
+                )
+                trial_tests_taken = user_data.get('trial_tests_taken', []) or []
+                
+                if int(test_id) in trial_tests_taken:
+                    await callback.answer(
+                        "⚠️ Siz bu testdan trial test olgansiz. Faqat bir marta yechishingiz mumkin.",
+                        show_alert=True
+                    )
+                    return
+                
+                # Save test data to state for Telegram test
+                await state.update_data(
+                    test_id=test_id,
+                    test_data=test,
+                    current_question=0,
+                    answers=[],
+                    is_trial=True
+                )
+                
+                # Show test info and start button
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(
+                        text="🚀 Trial testni boshlash",
+                        callback_data=f"start_trial_test_{test_id}"
+                    )],
+                    [InlineKeyboardButton(text="❌ Bekor qilish", callback_data="menu_trial")]
+                ])
+                
+                message_text = (
+                    f"🧪 <b>Trial Test</b>\n\n"
+                    f"📝 <b>{test_title}</b>\n\n"
+                    f"📊 Savollar: {trial_count} ta\n"
+                    f"⏱ Vaqt: {time_limit} daqiqa\n\n"
+                    f"Trial testni boshlash uchun quyidagi tugmani bosing:"
+                )
+                
+                try:
+                    await callback.message.edit_text(
+                        message_text,
+                        reply_markup=keyboard,
+                        parse_mode="HTML"
+                    )
+                except Exception as e:
+                    logger.error(f"Error editing message: {e}")
+                    await notify_error(
+                        "Trial test xabarni tahrirlash xatoligi",
+                        str(e),
+                        user_id=callback.from_user.id,
+                        context={
+                            'test_id': test_id,
+                            'test_title': test_title,
+                            'function': 'handle_trial_test'
+                        }
+                    )
+                    await callback.answer("❌ Xatolik yuz berdi", show_alert=True)
+            else:
+                await callback.answer("❌ Test topilmadi", show_alert=True)
+    
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data == "menu_back")
+async def menu_back(callback: types.CallbackQuery, state: FSMContext):
+    """Back to main menu"""
+    await state.clear()
+    user = callback.from_user
+    user_data = await get_or_create_user(user.id, user.first_name, user.last_name)
     await show_main_menu(callback.message, user_data)
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("back_question_"))
+async def handle_back_question(callback: types.CallbackQuery, state: FSMContext):
+    """Handle back to previous question"""
+    if process_answer:
+        # Get question index from callback data
+        question_index = int(callback.data.split("_")[2])
+        data = await state.get_data()
+        notify_callback = data.get('notify_callback')
+        notify_error_callback = data.get('notify_error_callback')
+        
+        # Show previous question
+        from test_handlers import show_question
+        await show_question(callback.message, state, question_index, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
+    else:
+        await callback.answer("❌ Funksiya mavjud emas", show_alert=True)
     await callback.answer()
 
 
@@ -929,8 +1574,10 @@ async def setup_bot_commands():
         types.BotCommand(command="start", description="Botni boshlash"),
         types.BotCommand(command="menu", description="Asosiy menu"),
         types.BotCommand(command="apply", description="Test topshirish"),
+        types.BotCommand(command="trial", description="Trial test"),
         types.BotCommand(command="profile", description="Profilni tahrirlash"),
         types.BotCommand(command="results", description="Natijalarim"),
+        types.BotCommand(command="upload_cv", description="CV yuklash"),
     ]
     await bot.set_my_commands(commands)
     logger.info("Bot commands menu set")

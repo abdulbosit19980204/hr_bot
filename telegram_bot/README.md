@@ -28,6 +28,11 @@ API_BASE_URL=http://localhost:8000/api
 # Development uchun: http://localhost:5173
 # Production uchun: https://yourdomain.com
 TELEGRAM_WEBAPP_URL=http://localhost:5173
+
+# Admin Group/Chat ID (xatoliklar va yangi kandidatlar haqida xabar yuborish uchun)
+# Guruh ID ni olish uchun: @userinfobot yoki @getidsbot botlaridan foydalaning
+# Guruh ID odatda manfiy raqam bo'ladi (masalan: -1001234567890)
+ADMIN_CHAT_ID=-1001234567890
 ```
 
 4. Run bot:
@@ -52,6 +57,11 @@ API_BASE_URL=https://yourdomain.com/api
 
 # WebApp URL (HTTPS bo'lishi kerak)
 TELEGRAM_WEBAPP_URL=https://yourdomain.com
+
+# Admin Group/Chat ID (xatoliklar va yangi kandidatlar haqida xabar yuborish uchun)
+# Guruh ID ni olish uchun: @userinfobot yoki @getidsbot botlaridan foydalaning
+# Guruh ID odatda manfiy raqam bo'ladi (masalan: -1001234567890)
+ADMIN_CHAT_ID=-1001234567890
 
 # Webhook Configuration
 WEBHOOK_HOST=https://yourdomain.com
@@ -78,6 +88,10 @@ python webhook.py
 - WebApp integration for test taking
 - Test results display
 - CV upload
+- Admin notifications:
+  - Yangi kandidat ro'yxatdan o'tganda xabar
+  - Test topshirganda natijalar
+  - Xatoliklar haqida xabar
 
 ## Webhook Setup
 
