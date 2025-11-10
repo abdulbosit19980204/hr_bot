@@ -39,8 +39,24 @@ class TestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Test
         fields = ['id', 'title', 'description', 'positions', 'time_limit', 'passing_score', 
-                  'is_active', 'questions', 'questions_count', 'created_at', 'updated_at']
+                  'test_mode', 'random_questions_count', 'show_answers_immediately',
+                  'trial_questions_count', 'is_active', 'questions', 'questions_count', 
+                  'created_at', 'updated_at']
         read_only_fields = ['created_at', 'updated_at']
+    
+    def to_representation(self, instance):
+        """Random questions tanlash va test mode'ga qarab filter qilish"""
+        data = super().to_representation(instance)
+        questions = data.get('questions', [])
+        
+        # Random questions count
+        random_count = instance.random_questions_count
+        if random_count > 0 and len(questions) > random_count:
+            import random
+            questions = random.sample(questions, random_count)
+            data['questions'] = questions
+        
+        return data
 
 
 class TestListSerializer(serializers.ModelSerializer):
@@ -50,7 +66,8 @@ class TestListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Test
         fields = ['id', 'title', 'description', 'positions', 'time_limit', 'passing_score', 
-                  'is_active', 'questions_count', 'created_at']
+                  'test_mode', 'random_questions_count', 'show_answers_immediately',
+                  'trial_questions_count', 'is_active', 'questions_count', 'created_at']
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -60,8 +77,9 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'first_name', 'last_name', 'email', 'phone', 
-                  'position', 'position_id', 'telegram_id', 'created_at']
-        read_only_fields = ['created_at']
+                  'position', 'position_id', 'telegram_id', 'is_blocked', 
+                  'blocked_reason', 'trial_tests_taken', 'created_at']
+        read_only_fields = ['created_at', 'is_blocked', 'blocked_reason', 'blocked_at']
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -139,11 +157,11 @@ class TestResultSerializer(serializers.ModelSerializer):
 class TestResultCreateSerializer(serializers.Serializer):
     test_id = serializers.IntegerField()
     answers = serializers.ListField(
-        child=serializers.DictField(
-            child=serializers.IntegerField()
-        )
+        child=serializers.DictField()
     )
     time_taken = serializers.IntegerField()
+    telegram_id = serializers.IntegerField(required=False, allow_null=True)  # Bot uchun
+    is_trial = serializers.BooleanField(default=False)  # Trial test
 
     def validate_answers(self, value):
         if not isinstance(value, list):
@@ -151,33 +169,65 @@ class TestResultCreateSerializer(serializers.Serializer):
         return value
 
     def create(self, validated_data):
-        user = self.context['request'].user
+        from django.utils import timezone
+        request = self.context['request']
         test_id = validated_data['test_id']
         answers_data = validated_data['answers']
         time_taken = validated_data['time_taken']
+        telegram_id = validated_data.get('telegram_id')
+
+        # Get user (from request or telegram_id)
+        if telegram_id:
+            try:
+                user = User.objects.get(telegram_id=telegram_id)
+            except User.DoesNotExist:
+                raise serializers.ValidationError("User not found")
+        else:
+            user = request.user
+            if not user.is_authenticated:
+                raise serializers.ValidationError("Authentication required")
 
         try:
             test = Test.objects.get(id=test_id, is_active=True)
         except Test.DoesNotExist:
             raise serializers.ValidationError("Test not found or inactive")
 
-        # Calculate score
-        total_questions = test.questions.count()
-        correct_answers = 0
+        # Get questions (random if configured or trial)
+        is_trial = validated_data.get('is_trial', False)
+        questions = list(test.questions.all().order_by('order', 'id'))
+        
+        if is_trial:
+            # Trial test - use trial_questions_count
+            trial_count = test.trial_questions_count
+            if len(questions) > trial_count:
+                import random
+                questions = random.sample(questions, trial_count)
+        elif test.random_questions_count > 0:
+            # Regular test - use random_questions_count
+            if len(questions) > test.random_questions_count:
+                import random
+                questions = random.sample(questions, test.random_questions_count)
 
         # Create test result
         result = TestResult.objects.create(
             user=user,
             test=test,
-            total_questions=total_questions,
+            total_questions=len(questions),
             correct_answers=0,
             time_taken=time_taken
         )
 
         # Process answers
+        correct_answers = 0
+        question_ids = {q.id for q in questions}
+        
         for answer_data in answers_data:
             question_id = answer_data.get('question_id')
             option_id = answer_data.get('option_id')
+
+            # Check if question is in test
+            if question_id not in question_ids:
+                continue
 
             try:
                 question = Question.objects.get(id=question_id, test=test)
@@ -196,11 +246,23 @@ class TestResultCreateSerializer(serializers.Serializer):
             except (Question.DoesNotExist, AnswerOption.DoesNotExist):
                 continue
 
-        # Update result
-        score = int((correct_answers / total_questions * 100)) if total_questions > 0 else 0
-        result.correct_answers = correct_answers
+        # Update score
+        total_questions = len(questions)
+        score = int((correct_answers / total_questions) * 100) if total_questions > 0 else 0
         result.score = score
+        result.correct_answers = correct_answers
+        result.total_questions = total_questions
+        result.completed_at = timezone.now()
         result.save()
+        
+        # Mark trial test as taken
+        is_trial = validated_data.get('is_trial', False)
+        if is_trial and telegram_id:
+            trial_tests = user.trial_tests_taken or []
+            if test.id not in trial_tests:
+                trial_tests.append(test.id)
+                user.trial_tests_taken = trial_tests
+                user.save()
 
         return result
 

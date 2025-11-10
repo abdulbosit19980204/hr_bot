@@ -17,15 +17,18 @@ class PositionAdmin(admin.ModelAdmin):
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ['username', 'first_name', 'last_name', 'email', 'phone', 'position', 'telegram_id', 'is_staff', 'created_at']
-    list_filter = ['is_staff', 'is_superuser', 'position', 'created_at']
+    list_display = ['username', 'first_name', 'last_name', 'email', 'phone', 'position', 'telegram_id', 'is_blocked', 'is_staff', 'created_at']
+    list_filter = ['is_staff', 'is_superuser', 'is_blocked', 'position', 'created_at']
     search_fields = ['username', 'first_name', 'last_name', 'email', 'phone', 'telegram_id']
     fieldsets = BaseUserAdmin.fieldsets + (
         ('Additional Info', {'fields': ('telegram_id', 'phone', 'position')}),
+        ('Block Status', {'fields': ('is_blocked', 'blocked_reason', 'blocked_at')}),
+        ('Trial Tests', {'fields': ('trial_tests_taken',)}),
     )
     add_fieldsets = BaseUserAdmin.add_fieldsets + (
         ('Additional Info', {'fields': ('telegram_id', 'phone', 'position')}),
     )
+    readonly_fields = ['blocked_at']
 
 
 @admin.register(CV)

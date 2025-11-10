@@ -25,6 +25,10 @@ class User(AbstractUser):
     telegram_id = models.BigIntegerField(unique=True, null=True, blank=True, verbose_name=_('Telegram ID'))
     phone = models.CharField(max_length=20, null=True, blank=True, verbose_name=_('Phone'))
     position = models.ForeignKey('Position', on_delete=models.SET_NULL, null=True, blank=True, related_name='users', verbose_name=_('Position'))
+    is_blocked = models.BooleanField(default=False, verbose_name=_('Is Blocked'), help_text=_('User block qilinganmi (cheating yoki boshqa sabablar)'))
+    blocked_reason = models.TextField(blank=True, null=True, verbose_name=_('Block Reason'), help_text=_('Block qilinish sababi'))
+    blocked_at = models.DateTimeField(null=True, blank=True, verbose_name=_('Blocked At'))
+    trial_tests_taken = models.JSONField(default=list, blank=True, verbose_name=_('Trial Tests Taken'), help_text=_('Qaysi testlardan trial test olgan'))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Created at'))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_('Updated at'))
 

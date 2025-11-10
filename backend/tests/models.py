@@ -5,11 +5,21 @@ from users.models import User
 
 class Test(models.Model):
     """Test model"""
+    TEST_MODE_CHOICES = [
+        ('webapp', _('WebApp')),
+        ('telegram', _('Telegram')),
+        ('both', _('Both (WebApp and Telegram)')),
+    ]
+    
     title = models.CharField(max_length=255, verbose_name=_('Title'))
     description = models.TextField(blank=True, null=True, verbose_name=_('Description'))
     positions = models.ManyToManyField('users.Position', related_name='tests', blank=True, verbose_name=_('Positions'), help_text=_('Test qaysi positionlar uchun mo\'ljallangan'))
     time_limit = models.IntegerField(default=60, help_text=_('Time limit in minutes'), verbose_name=_('Time Limit'))
     passing_score = models.IntegerField(default=60, help_text=_('Passing score in percentage'), verbose_name=_('Passing Score'))
+    test_mode = models.CharField(max_length=10, choices=TEST_MODE_CHOICES, default='both', verbose_name=_('Test Mode'), help_text=_('Test qayerda yechiladi'))
+    random_questions_count = models.IntegerField(default=0, verbose_name=_('Random Questions Count'), help_text=_('0 = barcha savollar, >0 = shuncha ta random savol tanlanadi'))
+    show_answers_immediately = models.BooleanField(default=True, verbose_name=_('Show Answers Immediately'), help_text=_('Har bir savoldan keyin javob ko\'rsatilsinmi'))
+    trial_questions_count = models.IntegerField(default=10, verbose_name=_('Trial Questions Count'), help_text=_('Trial test uchun nechta savol berilsin'))
     is_active = models.BooleanField(default=True, verbose_name=_('Is Active'))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Created at'))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_('Updated at'))

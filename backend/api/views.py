@@ -5,12 +5,14 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
 from django.db.models import Q, Count, Avg
+from django.db import models
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.utils import timezone
 from datetime import timedelta
+import random
 
 from users.models import CV, Position
 from tests.models import Test, Question, AnswerOption, TestResult
@@ -57,16 +59,128 @@ class TestViewSet(viewsets.ModelViewSet):
         if position_id:
             queryset = queryset.filter(positions__id=position_id, positions__is_open=True)
         
+        # Filter by test_mode if provided
+        test_mode = self.request.query_params.get('test_mode')
+        if test_mode:
+            queryset = queryset.filter(
+                models.Q(test_mode=test_mode) | models.Q(test_mode='both')
+            )
+        
         if self.action == 'retrieve':
             return queryset.prefetch_related('questions__options', 'positions')
         return queryset.prefetch_related('positions')
-
+    
     @action(detail=True, methods=['get'])
     def questions(self, request, pk=None):
+        """Get test questions (random if configured)"""
         test = self.get_object()
-        questions = test.questions.all().prefetch_related('options')
+        is_trial = request.query_params.get('trial', 'false').lower() == 'true'
+        telegram_id = request.query_params.get('telegram_id')
+        
+        # Check if user is blocked
+        if telegram_id:
+            try:
+                user = User.objects.get(telegram_id=telegram_id)
+                if user.is_blocked:
+                    return Response(
+                        {'error': 'User is blocked', 'reason': user.blocked_reason},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            except User.DoesNotExist:
+                pass
+        
+        questions = test.questions.all().prefetch_related('options').order_by('order', 'id')
+        
+        # Trial test
+        if is_trial:
+            questions = list(questions)
+            trial_count = test.trial_questions_count
+            if len(questions) > trial_count:
+                questions = random.sample(questions, trial_count)
+        # Random questions for regular test
+        elif test.random_questions_count > 0:
+            questions = list(questions)
+            if len(questions) > test.random_questions_count:
+                questions = random.sample(questions, test.random_questions_count)
+        
         serializer = QuestionSerializer(questions, many=True)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def start_test(self, request, pk=None):
+        """Start test session"""
+        test = self.get_object()
+        telegram_id = request.data.get('telegram_id')
+        is_trial = request.data.get('trial', False)
+        
+        if telegram_id:
+            try:
+                user = User.objects.get(telegram_id=telegram_id)
+                if user.is_blocked:
+                    return Response(
+                        {'error': 'User is blocked', 'reason': user.blocked_reason},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                
+                # Check trial test
+                if is_trial:
+                    trial_tests = user.trial_tests_taken or []
+                    if test.id in trial_tests:
+                        return Response(
+                            {'error': 'Trial test already taken for this test'},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                
+                # Generate test session token
+                import uuid
+                session_token = str(uuid.uuid4())
+                
+                return Response({
+                    'session_token': session_token,
+                    'test_id': test.id,
+                    'time_limit': test.time_limit,
+                    'is_trial': is_trial
+                })
+            except User.DoesNotExist:
+                return Response(
+                    {'error': 'User not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        
+        return Response(
+            {'error': 'telegram_id required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    @action(detail=True, methods=['post'])
+    def block_user(self, request, pk=None):
+        """Block user for cheating"""
+        test = self.get_object()
+        telegram_id = request.data.get('telegram_id')
+        reason = request.data.get('reason', 'Test tark etildi (cheating)')
+        
+        if telegram_id:
+            try:
+                user = User.objects.get(telegram_id=telegram_id)
+                user.is_blocked = True
+                user.blocked_reason = reason
+                user.blocked_at = timezone.now()
+                user.save()
+                
+                return Response({
+                    'message': 'User blocked successfully',
+                    'user_id': user.id
+                })
+            except User.DoesNotExist:
+                return Response(
+                    {'error': 'User not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        
+        return Response(
+            {'error': 'telegram_id required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
 
 class QuestionViewSet(viewsets.ModelViewSet):
@@ -132,7 +246,15 @@ class UserViewSet(viewsets.ModelViewSet):
                 # Update user data
                 for key in ['first_name', 'last_name', 'email', 'phone']:
                     if key in request.data:
-                        setattr(user, key, request.data[key])
+                        value = request.data[key]
+                        # first_name bo'sh bo'lmasligi kerak
+                        if key == 'first_name' and not value:
+                            value = user.first_name or 'User'
+                        setattr(user, key, value)
+                
+                # first_name bo'sh bo'lsa, default qo'yish
+                if not user.first_name:
+                    user.first_name = request.data.get('first_name', 'User') or 'User'
                 
                 # Handle position (can be position_id)
                 if 'position_id' in request.data:
@@ -192,19 +314,56 @@ class UserViewSet(viewsets.ModelViewSet):
 
 class CVViewSet(viewsets.ModelViewSet):
     serializer_class = CVSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]  # Bot uchun ochiq qildik
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ['user']
     ordering_fields = ['uploaded_at']
     ordering = ['-uploaded_at']
 
     def get_queryset(self):
-        if self.request.user.is_staff:
+        # Staff uchun barcha CV'lar
+        if self.request.user.is_authenticated and self.request.user.is_staff:
             return CV.objects.all()
-        return CV.objects.filter(user=self.request.user)
+        
+        # Telegram ID bo'yicha filter (bot uchun)
+        telegram_id = self.request.query_params.get('user__telegram_id')
+        if telegram_id:
+            return CV.objects.filter(user__telegram_id=telegram_id)
+        
+        # Authenticated user uchun faqat o'z CV'lari
+        if self.request.user.is_authenticated:
+            return CV.objects.filter(user=self.request.user)
+        
+        return CV.objects.none()
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        # Bot uchun telegram_id orqali user topish
+        telegram_id = self.request.data.get('telegram_id')
+        if telegram_id:
+            try:
+                user = User.objects.get(telegram_id=telegram_id)
+                serializer.save(user=user)
+            except User.DoesNotExist:
+                from rest_framework import serializers as drf_serializers
+                raise drf_serializers.ValidationError("User not found")
+        else:
+            if not self.request.user.is_authenticated:
+                from rest_framework import serializers as drf_serializers
+                raise drf_serializers.ValidationError("Authentication required")
+            serializer.save(user=self.request.user)
+    
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        
+        # CV yuklanganidan keyin xabar
+        if response.status_code == status.HTTP_201_CREATED:
+            response.data['message'] = (
+                "✅ CV muvaffaqiyatli yuklandi!\n\n"
+                "Biz sizga tez orada aloqaga chiqamiz va siz bilan birinchi Zoom interview uchun maslahatlarimizni beramiz.\n\n"
+                "Rahmat!"
+            )
+        
+        return response
 
 
 class TestResultViewSet(viewsets.ModelViewSet):
@@ -238,10 +397,22 @@ class TestResultViewSet(viewsets.ModelViewSet):
         return TestResult.objects.none()
 
     def create(self, request, *args, **kwargs):
+        # Bot uchun telegram_id qo'shish (request.data dan olish)
         serializer = self.get_serializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         result = serializer.save()
-        return Response(TestResultSerializer(result).data, status=status.HTTP_201_CREATED)
+        
+        response_data = TestResultSerializer(result).data
+        
+        # CV upload request (minimal ball o'tganda)
+        if result.is_passed:
+            response_data['requires_cv'] = True
+            response_data['cv_upload_message'] = (
+                "Tabriklaymiz! Siz testdan o'tdingiz. "
+                "CV yuklash uchun tayyor bo'ling."
+            )
+        
+        return Response(response_data, status=status.HTTP_201_CREATED)
 
 
 class StatisticsView(APIView):
