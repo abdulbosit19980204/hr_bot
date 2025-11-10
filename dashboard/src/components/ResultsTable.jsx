@@ -13,8 +13,16 @@ function ResultsTable({ apiBaseUrl }) {
 
   const loadResults = async () => {
     try {
+      // Get token from localStorage
+      const token = localStorage.getItem('access_token')
+      const headers = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
       const response = await axios.get(`${apiBaseUrl}/results/`, {
-        params: { page }
+        params: { page },
+        headers: headers
       })
       setResults(response.data.results || response.data)
       if (response.data.count) {
@@ -23,6 +31,11 @@ function ResultsTable({ apiBaseUrl }) {
       setLoading(false)
     } catch (err) {
       console.error('Error loading results:', err)
+      if (err.response?.status === 401) {
+        // Token expired or invalid, redirect to login
+        localStorage.removeItem('access_token')
+        window.location.reload()
+      }
       setLoading(false)
     }
   }

@@ -66,7 +66,7 @@ class TestListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Test
         fields = ['id', 'title', 'description', 'positions', 'time_limit', 'passing_score', 
-                  'test_mode', 'random_questions_count', 'show_answers_immediately',
+                  'test_mode', 'max_attempts', 'random_questions_count', 'show_answers_immediately',
                   'trial_questions_count', 'is_active', 'questions_count', 'created_at']
 
 
@@ -149,9 +149,10 @@ class TestResultSerializer(serializers.ModelSerializer):
     class Meta:
         model = TestResult
         fields = ['id', 'user', 'test', 'score', 'total_questions', 'correct_answers', 
-                  'started_at', 'completed_at', 'time_taken', 'is_passed', 'answers']
+                  'started_at', 'completed_at', 'time_taken', 'is_passed', 'attempt_number', 
+                  'is_completed', 'answers']
         read_only_fields = ['started_at', 'completed_at', 'time_taken', 'score', 
-                           'total_questions', 'correct_answers', 'is_passed']
+                           'total_questions', 'correct_answers', 'is_passed', 'attempt_number', 'is_completed']
 
 
 class TestResultCreateSerializer(serializers.Serializer):
@@ -162,6 +163,7 @@ class TestResultCreateSerializer(serializers.Serializer):
     time_taken = serializers.IntegerField()
     telegram_id = serializers.IntegerField(required=False, allow_null=True)  # Bot uchun
     is_trial = serializers.BooleanField(default=False)  # Trial test
+    result_id = serializers.IntegerField(required=False, allow_null=True)  # Resume existing test
 
     def validate_answers(self, value):
         if not isinstance(value, list):
@@ -175,13 +177,35 @@ class TestResultCreateSerializer(serializers.Serializer):
         answers_data = validated_data['answers']
         time_taken = validated_data['time_taken']
         telegram_id = validated_data.get('telegram_id')
+        result_id = validated_data.get('result_id')
 
         # Get user (from request or telegram_id)
         if telegram_id:
+            # Check if this is bot's own telegram_id (prevent bot from taking tests)
+            import os
+            from django.conf import settings
+            bot_token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
+            if bot_token:
+                try:
+                    import requests
+                    bot_info = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe", timeout=2)
+                    if bot_info.status_code == 200:
+                        bot_data = bot_info.json()
+                        if bot_data.get('ok') and bot_data.get('result', {}).get('id') == telegram_id:
+                            raise serializers.ValidationError("Bot o'zi test yubora olmaydi")
+                except Exception:
+                    pass  # Ignore errors in bot ID check
+            
             try:
                 user = User.objects.get(telegram_id=telegram_id)
             except User.DoesNotExist:
-                raise serializers.ValidationError("User not found")
+                # Create user if not exists (for Telegram bot)
+                user = User.objects.create_user(
+                    username=f'user_{telegram_id}',
+                    telegram_id=telegram_id,
+                    first_name='',
+                    last_name=''
+                )
         else:
             user = request.user
             if not user.is_authenticated:
@@ -191,6 +215,28 @@ class TestResultCreateSerializer(serializers.Serializer):
             test = Test.objects.get(id=test_id, is_active=True)
         except Test.DoesNotExist:
             raise serializers.ValidationError("Test not found or inactive")
+
+        # Get or create test result
+        if result_id:
+            # Resume existing test
+            try:
+                result = TestResult.objects.get(id=result_id, user=user, test=test, is_completed=False)
+            except TestResult.DoesNotExist:
+                raise serializers.ValidationError("Test result not found or already completed")
+        else:
+            # Create new test result
+            attempt_number = TestResult.objects.filter(user=user, test=test).count() + 1
+            result = TestResult.objects.create(
+                user=user,
+                test=test,
+                total_questions=0,
+                correct_answers=0,
+                score=0,
+                time_taken=0,
+                attempt_number=attempt_number,
+                is_completed=False,
+                started_at=timezone.now()
+            )
 
         # Get questions (random if configured or trial)
         is_trial = validated_data.get('is_trial', False)
@@ -208,23 +254,24 @@ class TestResultCreateSerializer(serializers.Serializer):
                 import random
                 questions = random.sample(questions, test.random_questions_count)
 
-        # Create test result
-        result = TestResult.objects.create(
-            user=user,
-            test=test,
-            total_questions=len(questions),
-            correct_answers=0,
-            time_taken=time_taken
-        )
+        # Update test result
+        result.total_questions = len(questions)
+        result.time_taken = time_taken
 
-        # Process answers
-        correct_answers = 0
-        question_ids = {q.id for q in questions}
-        
+        # Process answers - remove duplicates first
+        # Group answers by question_id and keep only the last one for each question
+        unique_answers = {}
         for answer_data in answers_data:
             question_id = answer_data.get('question_id')
             option_id = answer_data.get('option_id')
-
+            if question_id and option_id:
+                unique_answers[question_id] = option_id
+        
+        # Process unique answers
+        correct_answers = 0
+        question_ids = {q.id for q in questions}
+        
+        for question_id, option_id in unique_answers.items():
             # Check if question is in test
             if question_id not in question_ids:
                 continue
@@ -237,11 +284,14 @@ class TestResultCreateSerializer(serializers.Serializer):
                 if is_correct:
                     correct_answers += 1
 
-                UserAnswer.objects.create(
+                # Update or create UserAnswer (to avoid duplicate)
+                UserAnswer.objects.update_or_create(
                     result=result,
                     question=question,
-                    selected_option=option,
-                    is_correct=is_correct
+                    defaults={
+                        'selected_option': option,
+                        'is_correct': is_correct
+                    }
                 )
             except (Question.DoesNotExist, AnswerOption.DoesNotExist):
                 continue
@@ -253,6 +303,7 @@ class TestResultCreateSerializer(serializers.Serializer):
         result.correct_answers = correct_answers
         result.total_questions = total_questions
         result.completed_at = timezone.now()
+        result.is_completed = True
         result.save()
         
         # Mark trial test as taken

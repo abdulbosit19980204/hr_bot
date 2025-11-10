@@ -27,6 +27,7 @@ function App() {
       const urlParams = new URLSearchParams(window.location.search)
       const testId = urlParams.get('test_id')
       let userId = urlParams.get('user_id')
+      const isTrial = urlParams.get('trial') === 'true'
 
       // Try to get user_id from Telegram WebApp
       if (!userId && window.Telegram && window.Telegram.WebApp) {
@@ -61,7 +62,16 @@ function App() {
       })
 
       if (userResponse.data.user) {
-        setUser(userResponse.data.user)
+        const userData = userResponse.data.user
+        
+        // Check if user is blocked
+        if (userData.is_blocked) {
+          setError(`Siz block qilingansiz: ${userData.blocked_reason || "Noma'lum sabab"}`)
+          setLoading(false)
+          return
+        }
+        
+        setUser(userData)
         
         // Set auth token
         if (userResponse.data.access) {
@@ -69,18 +79,31 @@ function App() {
         }
 
         // Get test
-        const testResponse = await axios.get(`${API_BASE_URL}/tests/${testId}/`)
-        if (testResponse.data) {
-          setTest(testResponse.data)
-        } else {
-          setError('Test topilmadi')
+        try {
+          const testResponse = await axios.get(`${API_BASE_URL}/tests/${testId}/`)
+          if (testResponse.data && testResponse.data.id) {
+            setTest(testResponse.data)
+          } else {
+            setError('Test topilmadi yoki faol emas')
+          }
+        } catch (testErr) {
+          console.error('Error loading test:', testErr)
+          if (testErr.response?.status === 404) {
+            setError('Test topilmadi yoki faol emas')
+          } else {
+            setError(testErr.response?.data?.error || 'Test yuklashda xatolik yuz berdi')
+          }
         }
       } else {
         setError('Foydalanuvchi topilmadi')
       }
     } catch (err) {
       console.error('Initialization error:', err)
-      setError(err.response?.data?.error || err.message || 'Xatolik yuz berdi')
+      if (err.response?.status === 403) {
+        setError(`Siz block qilingansiz: ${err.response?.data?.reason || "Noma'lum sabab"}`)
+      } else {
+        setError(err.response?.data?.error || err.message || 'Xatolik yuz berdi')
+      }
     } finally {
       setLoading(false)
     }
@@ -115,6 +138,7 @@ function App() {
           user={user}
           onComplete={handleTestComplete}
           apiBaseUrl={API_BASE_URL}
+          isTrial={new URLSearchParams(window.location.search).get('trial') === 'true'}
         />
       )}
       {page === 'result' && (

@@ -15,11 +15,17 @@ function Dashboard({ onLogout, apiBaseUrl }) {
 
   const loadStatistics = async () => {
     try {
-      const response = await axios.get(`${apiBaseUrl}/statistics/`)
+      // Statistics endpoint AllowAny permission ga ega, shuning uchun token talab qilmaydi
+      const response = await axios.get(`${apiBaseUrl}/statistics/`, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
       setStats(response.data)
       setLoading(false)
     } catch (err) {
-      setError(err.response?.data?.error || 'Xatolik yuz berdi')
+      console.error('Statistics load error:', err)
+      setError(err.response?.data?.error || err.message || 'Xatolik yuz berdi')
       setLoading(false)
     }
   }

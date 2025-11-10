@@ -13,6 +13,9 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from django.utils import timezone
 from datetime import timedelta
 import random
+import logging
+
+logger = logging.getLogger(__name__)
 
 from users.models import CV, Position
 from tests.models import Test, Question, AnswerOption, TestResult
@@ -66,6 +69,31 @@ class TestViewSet(viewsets.ModelViewSet):
                 models.Q(test_mode=test_mode) | models.Q(test_mode='both')
             )
         
+        # Filter out tests where user has used all attempts
+        telegram_id = self.request.query_params.get('telegram_id')
+        if telegram_id and self.action == 'list':
+            try:
+                user = User.objects.get(telegram_id=telegram_id)
+                # Get tests where user has completed all attempts
+                from tests.models import TestResult
+                
+                # Get test IDs where user has completed max_attempts
+                completed_tests = []
+                for test in queryset:
+                    completed_count = TestResult.objects.filter(
+                        user=user,
+                        test=test,
+                        is_completed=True
+                    ).count()
+                    if completed_count >= test.max_attempts:
+                        completed_tests.append(test.id)
+                
+                # Exclude tests where all attempts are used
+                if completed_tests:
+                    queryset = queryset.exclude(id__in=completed_tests)
+            except User.DoesNotExist:
+                pass
+        
         if self.action == 'retrieve':
             return queryset.prefetch_related('questions__options', 'positions')
         return queryset.prefetch_related('positions')
@@ -108,7 +136,10 @@ class TestViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     def start_test(self, request, pk=None):
-        """Start test session"""
+        """Start test session or resume existing test"""
+        from django.utils import timezone
+        from datetime import timedelta
+        
         test = self.get_object()
         telegram_id = request.data.get('telegram_id')
         is_trial = request.data.get('trial', False)
@@ -131,6 +162,68 @@ class TestViewSet(viewsets.ModelViewSet):
                             status=status.HTTP_400_BAD_REQUEST
                         )
                 
+                # Check if user has completed all attempts
+                completed_results = TestResult.objects.filter(
+                    user=user,
+                    test=test,
+                    is_completed=True
+                ).count()
+                
+                if completed_results >= test.max_attempts:
+                    return Response(
+                        {'error': 'All attempts used', 'max_attempts': test.max_attempts},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Check for incomplete test (resume)
+                incomplete_result = TestResult.objects.filter(
+                    user=user,
+                    test=test,
+                    is_completed=False
+                ).order_by('-started_at').first()
+                
+                if incomplete_result:
+                    # Check if test time limit has expired
+                    time_elapsed = (timezone.now() - incomplete_result.started_at).total_seconds() / 60
+                    if time_elapsed < test.time_limit:
+                        # Resume existing test
+                        return Response({
+                            'session_token': str(incomplete_result.id),  # Use result ID as session token
+                            'test_id': test.id,
+                            'time_limit': test.time_limit,
+                            'time_elapsed': int(time_elapsed),
+                            'time_remaining': int(test.time_limit - time_elapsed),
+                            'is_trial': is_trial,
+                            'resume': True,
+                            'result_id': incomplete_result.id,
+                            'attempt_number': incomplete_result.attempt_number
+                        })
+                    else:
+                        # Time expired, mark as completed
+                        incomplete_result.is_completed = True
+                        incomplete_result.completed_at = timezone.now()
+                        incomplete_result.save()
+                
+                # Start new test attempt
+                attempt_number = TestResult.objects.filter(
+                    user=user,
+                    test=test
+                ).count() + 1
+                
+                # Create new test result (incomplete)
+                from tests.models import TestResult
+                new_result = TestResult.objects.create(
+                    user=user,
+                    test=test,
+                    score=0,
+                    total_questions=0,
+                    correct_answers=0,
+                    time_taken=0,
+                    attempt_number=attempt_number,
+                    is_completed=False,
+                    started_at=timezone.now()
+                )
+                
                 # Generate test session token
                 import uuid
                 session_token = str(uuid.uuid4())
@@ -139,7 +232,10 @@ class TestViewSet(viewsets.ModelViewSet):
                     'session_token': session_token,
                     'test_id': test.id,
                     'time_limit': test.time_limit,
-                    'is_trial': is_trial
+                    'is_trial': is_trial,
+                    'resume': False,
+                    'result_id': new_result.id,
+                    'attempt_number': attempt_number
                 })
             except User.DoesNotExist:
                 return Response(
@@ -382,16 +478,22 @@ class TestResultViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         # Staff uchun barcha natijalar
         if self.request.user.is_authenticated and self.request.user.is_staff:
-            return TestResult.objects.all().select_related('user', 'test')
+            return TestResult.objects.filter(is_completed=True).select_related('user', 'test')
         
         # Telegram ID bo'yicha filter (bot uchun)
         telegram_id = self.request.query_params.get('user__telegram_id')
         if telegram_id:
-            return TestResult.objects.filter(user__telegram_id=telegram_id).select_related('user', 'test')
+            return TestResult.objects.filter(
+                user__telegram_id=telegram_id,
+                is_completed=True
+            ).select_related('user', 'test')
         
         # Authenticated user uchun faqat o'z natijalari
         if self.request.user.is_authenticated:
-            return TestResult.objects.filter(user=self.request.user).select_related('user', 'test')
+            return TestResult.objects.filter(
+                user=self.request.user,
+                is_completed=True
+            ).select_related('user', 'test')
         
         # Unauthenticated - bo'sh queryset
         return TestResult.objects.none()
@@ -416,7 +518,9 @@ class TestResultViewSet(viewsets.ModelViewSet):
 
 
 class StatisticsView(APIView):
+    """Statistics view - AllowAny permission for frontend access"""
     permission_classes = [AllowAny]  # Frontend uchun ochiq qildik
+    authentication_classes = []  # Authentication talab qilmaymiz
 
     def get(self, request):
         # Development uchun authentication talab qilmaymiz

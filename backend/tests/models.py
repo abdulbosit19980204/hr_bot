@@ -20,6 +20,7 @@ class Test(models.Model):
     random_questions_count = models.IntegerField(default=0, verbose_name=_('Random Questions Count'), help_text=_('0 = barcha savollar, >0 = shuncha ta random savol tanlanadi'))
     show_answers_immediately = models.BooleanField(default=True, verbose_name=_('Show Answers Immediately'), help_text=_('Har bir savoldan keyin javob ko\'rsatilsinmi'))
     trial_questions_count = models.IntegerField(default=10, verbose_name=_('Trial Questions Count'), help_text=_('Trial test uchun nechta savol berilsin'))
+    max_attempts = models.IntegerField(default=2, verbose_name=_('Max Attempts'), help_text=_('Foydalanuvchi necha marta urinish berishi mumkin'))
     is_active = models.BooleanField(default=True, verbose_name=_('Is Active'))
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Created at'))
     updated_at = models.DateTimeField(auto_now=True, verbose_name=_('Updated at'))
@@ -73,8 +74,10 @@ class TestResult(models.Model):
     total_questions = models.IntegerField(verbose_name=_('Total Questions'))
     correct_answers = models.IntegerField(verbose_name=_('Correct Answers'))
     started_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Started at'))
-    completed_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Completed at'))
+    completed_at = models.DateTimeField(null=True, blank=True, verbose_name=_('Completed at'))
     time_taken = models.IntegerField(help_text=_('Time taken in seconds'), verbose_name=_('Time Taken'))
+    attempt_number = models.IntegerField(default=1, verbose_name=_('Attempt Number'), help_text=_('Qaysi urinish'))
+    is_completed = models.BooleanField(default=False, verbose_name=_('Is Completed'), help_text=_('Test yakunlanganmi'))
 
     class Meta:
         verbose_name = _('Test Result')

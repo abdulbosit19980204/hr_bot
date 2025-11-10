@@ -125,15 +125,24 @@ class TestAdmin(admin.ModelAdmin):
                         )
                         test.positions.add(position)
                     
-                    # Questions start from row 7
+                    # Questions start from row 8 (row 7 is header)
                     # Format: Question | Option1 | Option2 | Option3 | Option4 | Correct Answer (1-4)
-                    current_row = 7
+                    current_row = 8
                     question_order = 1
                     
-                    while ws.cell(row=current_row, column=1).value:
+                    # Skip header row (row 7) and start from row 8
+                    while current_row <= ws.max_row:
                         question_text = ws.cell(row=current_row, column=1).value
                         if not question_text:
-                            break
+                            current_row += 1
+                            continue
+                        
+                        # Skip if it's a header row (check if it contains "Question" or "Option")
+                        if isinstance(question_text, str):
+                            question_text_lower = question_text.lower()
+                            if 'question' in question_text_lower or 'option' in question_text_lower:
+                                current_row += 1
+                                continue
                         
                         question = Question.objects.create(
                             test=test,
@@ -257,10 +266,10 @@ class UserAnswerInline(admin.TabularInline):
 
 @admin.register(TestResult)
 class TestResultAdmin(admin.ModelAdmin):
-    list_display = ['user', 'test', 'score', 'correct_answers', 'total_questions', 'is_passed_display', 'completed_at']
-    list_filter = ['test', 'completed_at', 'user__position']
+    list_display = ['user', 'test', 'attempt_number', 'score', 'correct_answers', 'total_questions', 'is_passed_display', 'is_completed', 'started_at', 'completed_at']
+    list_filter = ['test', 'is_completed', 'attempt_number', 'completed_at', 'user__position']
     search_fields = ['user__username', 'user__first_name', 'user__last_name', 'test__title']
-    readonly_fields = ['started_at', 'completed_at', 'time_taken']
+    readonly_fields = ['started_at', 'completed_at', 'time_taken', 'attempt_number']
     inlines = [UserAnswerInline]
     date_hierarchy = 'completed_at'
     actions = ['export_to_excel', 'export_to_csv']

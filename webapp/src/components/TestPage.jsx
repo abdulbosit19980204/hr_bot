@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
+import './TestPage.css'
 
-function TestPage({ test, user, onComplete, apiBaseUrl }) {
+function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
   const [questions, setQuestions] = useState([])
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState({})
@@ -9,27 +10,204 @@ function TestPage({ test, user, onComplete, apiBaseUrl }) {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [startTime] = useState(Date.now())
+  const [showLeaveModal, setShowLeaveModal] = useState(false)
+  const [attemptedLeave, setAttemptedLeave] = useState(false)
+  const testContainerRef = useRef(null)
 
   useEffect(() => {
     loadQuestions()
+    setupCheatingProtection()
+    return () => {
+      cleanupCheatingProtection()
+    }
   }, [])
 
   useEffect(() => {
-    if (timeLeft > 0) {
+    if (timeLeft > 0 && !submitting) {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000)
       return () => clearTimeout(timer)
-    } else {
+    } else if (timeLeft === 0 && !submitting) {
       handleSubmit()
     }
-  }, [timeLeft])
+  }, [timeLeft, submitting])
+
+  // Cheating protection: Disable copy, paste, select, context menu
+  const setupCheatingProtection = () => {
+    // Disable text selection
+    document.addEventListener('selectstart', preventSelection)
+    document.addEventListener('copy', preventCopy)
+    document.addEventListener('paste', preventPaste)
+    document.addEventListener('cut', preventCut)
+    document.addEventListener('contextmenu', preventContextMenu)
+    document.addEventListener('keydown', handleKeyDown)
+    
+    // Prevent page leave
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    window.addEventListener('blur', handleBlur)
+    window.addEventListener('focus', handleFocus)
+    
+    // Disable right click
+    document.addEventListener('mousedown', handleMouseDown)
+    
+    // Disable F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
+    document.addEventListener('keydown', handleDevTools)
+    
+    // Disable dragging
+    document.addEventListener('dragstart', preventDrag)
+  }
+
+  const cleanupCheatingProtection = () => {
+    document.removeEventListener('selectstart', preventSelection)
+    document.removeEventListener('copy', preventCopy)
+    document.removeEventListener('paste', preventPaste)
+    document.removeEventListener('cut', preventCut)
+    document.removeEventListener('contextmenu', preventContextMenu)
+    document.removeEventListener('keydown', handleKeyDown)
+    window.removeEventListener('beforeunload', handleBeforeUnload)
+    window.removeEventListener('blur', handleBlur)
+    window.removeEventListener('focus', handleFocus)
+    document.removeEventListener('mousedown', handleMouseDown)
+    document.removeEventListener('keydown', handleDevTools)
+    document.removeEventListener('dragstart', preventDrag)
+  }
+
+  const preventSelection = (e) => {
+    e.preventDefault()
+    return false
+  }
+
+  const preventCopy = (e) => {
+    e.preventDefault()
+    return false
+  }
+
+  const preventPaste = (e) => {
+    e.preventDefault()
+    return false
+  }
+
+  const preventCut = (e) => {
+    e.preventDefault()
+    return false
+  }
+
+  const preventContextMenu = (e) => {
+    e.preventDefault()
+    return false
+  }
+
+  const preventDrag = (e) => {
+    e.preventDefault()
+    return false
+  }
+
+  const handleKeyDown = (e) => {
+    // Allow navigation keys
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab') {
+      return
+    }
+    
+    // Prevent F12 and other dev tools shortcuts
+    if (e.key === 'F12' || 
+        (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
+        (e.ctrlKey && e.key === 'U') ||
+        (e.ctrlKey && e.key === 'S') ||
+        (e.ctrlKey && e.key === 'P')) {
+      e.preventDefault()
+      return false
+    }
+  }
+
+  const handleDevTools = (e) => {
+    if (e.key === 'F12' || 
+        (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
+        (e.ctrlKey && e.key === 'U')) {
+      e.preventDefault()
+      blockUser('DevTools ochishga urinish (cheating)')
+      return false
+    }
+  }
+
+  const handleMouseDown = (e) => {
+    if (e.button === 2) { // Right click
+      e.preventDefault()
+      return false
+    }
+  }
+
+  const handleBeforeUnload = (e) => {
+    if (!submitting && !attemptedLeave) {
+      e.preventDefault()
+      e.returnValue = 'Siz testni tark etmoqchisiz. Agar testni tark etsangiz, siz block qilinasiz va vakansiyangiz ko\'rib chiqishdan to\'xtatiladi. Davom etasizmi?'
+      setShowLeaveModal(true)
+      setAttemptedLeave(true)
+      return e.returnValue
+    }
+  }
+
+  const handleBlur = () => {
+    if (!submitting && !attemptedLeave) {
+      setShowLeaveModal(true)
+      setAttemptedLeave(true)
+    }
+  }
+
+  const handleFocus = () => {
+    if (attemptedLeave && !submitting) {
+      setShowLeaveModal(true)
+    }
+  }
+
+  const handleConfirmLeave = async () => {
+    setShowLeaveModal(false)
+    await blockUser('Test tark etildi (cheating)')
+    // Close window or redirect
+    if (window.Telegram && window.Telegram.WebApp) {
+      window.Telegram.WebApp.close()
+    } else {
+      window.close()
+    }
+  }
+
+  const handleCancelLeave = () => {
+    setShowLeaveModal(false)
+    setAttemptedLeave(false)
+  }
+
+  const blockUser = async (reason) => {
+    try {
+      await axios.post(`${apiBaseUrl}/tests/${test.id}/block_user/`, {
+        telegram_id: user.telegram_id,
+        reason: reason
+      })
+    } catch (error) {
+      console.error('Error blocking user:', error)
+    }
+  }
 
   const loadQuestions = async () => {
     try {
-      const response = await axios.get(`${apiBaseUrl}/tests/${test.id}/questions/`)
+      const params = new URLSearchParams()
+      if (user && user.telegram_id) {
+        params.append('telegram_id', user.telegram_id)
+      }
+      if (isTrial) {
+        params.append('trial', 'true')
+      }
+      
+      const response = await axios.get(
+        `${apiBaseUrl}/tests/${test.id}/questions/?${params.toString()}`
+      )
       setQuestions(response.data)
       setLoading(false)
     } catch (error) {
       console.error('Error loading questions:', error)
+      if (error.response?.status === 403) {
+        alert('Siz block qilingansiz: ' + (error.response?.data?.reason || 'Noma\'lum sabab'))
+        if (window.Telegram && window.Telegram.WebApp) {
+          window.Telegram.WebApp.close()
+        }
+      }
       setLoading(false)
     }
   }
@@ -57,6 +235,8 @@ function TestPage({ test, user, onComplete, apiBaseUrl }) {
     if (submitting) return
 
     setSubmitting(true)
+    cleanupCheatingProtection() // Allow normal behavior after submission
+    
     try {
       const timeTaken = Math.floor((Date.now() - startTime) / 1000)
       
@@ -69,13 +249,19 @@ function TestPage({ test, user, onComplete, apiBaseUrl }) {
       const response = await axios.post(`${apiBaseUrl}/results/`, {
         test_id: test.id,
         answers: answersData,
-        time_taken: timeTaken
+        time_taken: timeTaken,
+        telegram_id: user?.telegram_id,
+        is_trial: isTrial
       })
 
       onComplete(response.data)
     } catch (error) {
       console.error('Error submitting test:', error)
-      alert('Testni yuborishda xatolik yuz berdi')
+      if (error.response?.status === 403) {
+        alert('Siz block qilingansiz: ' + (error.response?.data?.reason || 'Noma\'lum sabab'))
+      } else {
+        alert('Testni yuborishda xatolik yuz berdi')
+      }
       setSubmitting(false)
     }
   }
@@ -100,7 +286,46 @@ function TestPage({ test, user, onComplete, apiBaseUrl }) {
   const selectedAnswer = answers[currentQuestion.id]
 
   return (
-    <div>
+    <div ref={testContainerRef} className="test-container" style={{ userSelect: 'none' }}>
+      {/* Leave Warning Modal */}
+      {showLeaveModal && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3>⚠️ Ogohlantirish</h3>
+            <p>
+              Siz testni tark etmoqchisiz. Agar testni tark etsangiz, siz block qilinasiz va vakansiyangiz ko'rib chiqishdan to'xtatiladi.
+            </p>
+            <p><strong>Haqiqatdan ham testni tark etmoqchimisiz?</strong></p>
+            <div className="modal-buttons">
+              <button className="btn btn-danger" onClick={handleConfirmLeave}>
+                Ha, tark etish
+              </button>
+              <button className="btn btn-secondary" onClick={handleCancelLeave}>
+                Bekor qilish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Info */}
+      <div className="card user-info-card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <strong>👤 {user?.first_name} {user?.last_name}</strong>
+            {user?.position && (
+              <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                💼 {user.position.name}
+              </div>
+            )}
+          </div>
+          {isTrial && (
+            <span className="trial-badge">🧪 Trial Test</span>
+          )}
+        </div>
+      </div>
+
+      {/* Test Info */}
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div>
@@ -119,8 +344,9 @@ function TestPage({ test, user, onComplete, apiBaseUrl }) {
         </div>
       </div>
 
-      <div className="card question-card">
-        <div className="question-text">
+      {/* Question Card */}
+      <div className="card question-card" style={{ userSelect: 'none' }}>
+        <div className="question-text" style={{ userSelect: 'none' }}>
           {currentQuestion.text}
         </div>
 
@@ -130,6 +356,7 @@ function TestPage({ test, user, onComplete, apiBaseUrl }) {
               key={option.id}
               className={`option ${selectedAnswer === option.id ? 'selected' : ''}`}
               onClick={() => handleAnswerSelect(currentQuestion.id, option.id)}
+              style={{ userSelect: 'none', cursor: 'pointer' }}
             >
               <div className="option-label">{option.text}</div>
             </div>
@@ -137,18 +364,19 @@ function TestPage({ test, user, onComplete, apiBaseUrl }) {
         </div>
       </div>
 
+      {/* Navigation Buttons */}
       <div style={{ display: 'flex', gap: '12px' }}>
         <button
           className="btn btn-secondary"
           onClick={handlePrevious}
-          disabled={currentQuestionIndex === 0}
+          disabled={currentQuestionIndex === 0 || submitting}
         >
           ← Oldingi
         </button>
         
         {currentQuestionIndex === questions.length - 1 ? (
           <button
-            className="btn"
+            className="btn btn-primary"
             onClick={handleSubmit}
             disabled={submitting || !selectedAnswer}
           >
@@ -156,9 +384,9 @@ function TestPage({ test, user, onComplete, apiBaseUrl }) {
           </button>
         ) : (
           <button
-            className="btn"
+            className="btn btn-primary"
             onClick={handleNext}
-            disabled={!selectedAnswer}
+            disabled={!selectedAnswer || submitting}
           >
             Keyingi →
           </button>
@@ -169,4 +397,3 @@ function TestPage({ test, user, onComplete, apiBaseUrl }) {
 }
 
 export default TestPage
-
