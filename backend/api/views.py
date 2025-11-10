@@ -208,7 +208,7 @@ class CVViewSet(viewsets.ModelViewSet):
 
 
 class TestResultViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]  # Bot uchun ochiq qildik, filter orqali cheklaymiz
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['test', 'user']
     search_fields = ['user__username', 'user__first_name', 'user__last_name', 'test__title']
@@ -221,9 +221,21 @@ class TestResultViewSet(viewsets.ModelViewSet):
         return TestResultSerializer
 
     def get_queryset(self):
-        if self.request.user.is_staff:
+        # Staff uchun barcha natijalar
+        if self.request.user.is_authenticated and self.request.user.is_staff:
             return TestResult.objects.all().select_related('user', 'test')
-        return TestResult.objects.filter(user=self.request.user).select_related('user', 'test')
+        
+        # Telegram ID bo'yicha filter (bot uchun)
+        telegram_id = self.request.query_params.get('user__telegram_id')
+        if telegram_id:
+            return TestResult.objects.filter(user__telegram_id=telegram_id).select_related('user', 'test')
+        
+        # Authenticated user uchun faqat o'z natijalari
+        if self.request.user.is_authenticated:
+            return TestResult.objects.filter(user=self.request.user).select_related('user', 'test')
+        
+        # Unauthenticated - bo'sh queryset
+        return TestResult.objects.none()
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data, context={'request': request})

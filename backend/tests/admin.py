@@ -105,12 +105,23 @@ class TestAdmin(admin.ModelAdmin):
                     test_data = {
                         'title': ws.cell(row=1, column=2).value or '',
                         'description': ws.cell(row=2, column=2).value or '',
-                        'position': ws.cell(row=3, column=2).value or '',
                         'time_limit': int(ws.cell(row=4, column=2).value or 60),
                         'passing_score': int(ws.cell(row=5, column=2).value or 60),
                     }
                     
+                    # Create test
                     test = Test.objects.create(**test_data)
+                    
+                    # Handle position (positions ManyToMany field)
+                    position_name = ws.cell(row=3, column=2).value
+                    if position_name:
+                        from users.models import Position
+                        # Try to get existing position or create new one
+                        position, created = Position.objects.get_or_create(
+                            name=str(position_name).strip(),
+                            defaults={'is_open': True, 'description': ''}
+                        )
+                        test.positions.add(position)
                     
                     # Questions start from row 7
                     # Format: Question | Option1 | Option2 | Option3 | Option4 | Correct Answer (1-4)
