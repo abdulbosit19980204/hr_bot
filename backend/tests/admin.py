@@ -21,13 +21,14 @@ class TestImportForm(forms.Form):
 
 @admin.register(Test)
 class TestAdmin(admin.ModelAdmin):
-    list_display = ['title', 'positions_display', 'test_mode', 'time_limit', 'passing_score', 'random_questions_count', 'trial_questions_count', 'is_active', 'questions_count', 'created_at']
+    list_display = ['title', 'positions_display', 'test_mode', 'time_limit', 'passing_score', 'random_questions_count', 'trial_questions_count', 'max_attempts', 'max_trial_attempts', 'is_active', 'questions_count', 'created_at']
     list_filter = ['is_active', 'test_mode', 'positions', 'created_at']
     search_fields = ['title', 'description']
     filter_horizontal = ['positions']
     fieldsets = (
         ('Basic Info', {'fields': ('title', 'description', 'positions')}),
         ('Test Settings', {'fields': ('test_mode', 'time_limit', 'passing_score', 'random_questions_count', 'trial_questions_count', 'show_answers_immediately')}),
+        ('Attempt Limits', {'fields': ('max_attempts', 'max_trial_attempts'), 'description': 'Foydalanuvchilar necha marta test ishlashlari mumkin'}),
         ('Status', {'fields': ('is_active',)}),
         ('Timestamps', {'fields': ('created_at', 'updated_at'), 'classes': ('collapse',)}),
     )

@@ -77,12 +77,14 @@ class TestViewSet(viewsets.ModelViewSet):
                 # Get tests where user has completed all attempts
                 from tests.models import TestResult
                 
-                # Get test IDs where user has completed max_attempts
+                # Get test IDs where user has completed max_attempts (for real tests only)
                 completed_tests = []
                 for test in queryset:
+                    # Check real test attempts (not trial)
                     completed_count = TestResult.objects.filter(
                         user=user,
                         test=test,
+                        is_trial=False,
                         is_completed=True
                     ).count()
                     if completed_count >= test.max_attempts:
@@ -114,6 +116,53 @@ class TestViewSet(viewsets.ModelViewSet):
                         {'error': 'User is blocked', 'reason': user.blocked_reason},
                         status=status.HTTP_403_FORBIDDEN
                     )
+                
+                # Check trial test attempts
+                if is_trial:
+                    trial_tests = user.trial_tests_taken or []
+                    if test.id in trial_tests:
+                        return Response(
+                            {'error': 'Trial test already taken for this test', 'max_trial_attempts': test.max_trial_attempts},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    
+                    # Check trial attempts count
+                    trial_results = TestResult.objects.filter(
+                        user=user,
+                        test=test,
+                        is_trial=True,
+                        is_completed=True
+                    ).count()
+                    
+                    if trial_results >= test.max_trial_attempts:
+                        return Response(
+                            {
+                                'error': 'All trial attempts used',
+                                'message': f'Siz trial testni {trial_results} marta ishlagansiz. Ruxsat etilgan urinishlar soni: {test.max_trial_attempts}',
+                                'attempts_used': trial_results,
+                                'max_trial_attempts': test.max_trial_attempts
+                            },
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                else:
+                    # Check real test attempts
+                    completed_results = TestResult.objects.filter(
+                        user=user,
+                        test=test,
+                        is_trial=False,
+                        is_completed=True
+                    ).count()
+                    
+                    if completed_results >= test.max_attempts:
+                        return Response(
+                            {
+                                'error': 'All attempts used',
+                                'message': f'Siz bu testni {completed_results} marta ishlagansiz. Ruxsat etilgan urinishlar soni: {test.max_attempts}',
+                                'attempts_used': completed_results,
+                                'max_attempts': test.max_attempts
+                            },
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
             except User.DoesNotExist:
                 pass
         
@@ -157,27 +206,52 @@ class TestViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_403_FORBIDDEN
                     )
                 
-                # Check trial test
+                # Check trial test attempts
                 if is_trial:
                     trial_tests = user.trial_tests_taken or []
                     if test.id in trial_tests:
                         return Response(
-                            {'error': 'Trial test already taken for this test'},
+                            {'error': 'Trial test already taken for this test', 'max_trial_attempts': test.max_trial_attempts},
                             status=status.HTTP_400_BAD_REQUEST
                         )
-                
-                # Check if user has completed all attempts
-                completed_results = TestResult.objects.filter(
-                    user=user,
-                    test=test,
-                    is_completed=True
-                ).count()
-                
-                if completed_results >= test.max_attempts:
-                    return Response(
-                        {'error': 'All attempts used', 'max_attempts': test.max_attempts},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                    
+                    # Check trial attempts count
+                    trial_results = TestResult.objects.filter(
+                        user=user,
+                        test=test,
+                        is_trial=True,
+                        is_completed=True
+                    ).count()
+                    
+                    if trial_results >= test.max_trial_attempts:
+                        return Response(
+                            {
+                                'error': 'All trial attempts used',
+                                'message': f'Siz trial testni {trial_results} marta ishlagansiz. Ruxsat etilgan urinishlar soni: {test.max_trial_attempts}',
+                                'attempts_used': trial_results,
+                                'max_trial_attempts': test.max_trial_attempts
+                            },
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                else:
+                    # Check real test attempts
+                    completed_results = TestResult.objects.filter(
+                        user=user,
+                        test=test,
+                        is_trial=False,
+                        is_completed=True
+                    ).count()
+                    
+                    if completed_results >= test.max_attempts:
+                        return Response(
+                            {
+                                'error': 'All attempts used',
+                                'message': f'Siz bu testni {completed_results} marta ishlagansiz. Ruxsat etilgan urinishlar soni: {test.max_attempts}',
+                                'attempts_used': completed_results,
+                                'max_attempts': test.max_attempts
+                            },
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
                 
                 # Check if user has uploaded CV for this test (if passed)
                 # If CV is uploaded, don't allow retaking the test
@@ -430,16 +504,17 @@ class UserViewSet(viewsets.ModelViewSet):
                 telegram_profile.telegram_username = request.data.get('telegram_username')
             if 'telegram_language_code' in request.data:
                 telegram_profile.telegram_language_code = request.data.get('telegram_language_code')
-            if 'telegram_is_premium' in request.data:
-                telegram_profile.telegram_is_premium = request.data.get('telegram_is_premium', False)
-            else:
-                # Ensure telegram_is_premium is set even if not provided
-                if not hasattr(telegram_profile, 'telegram_is_premium') or telegram_profile.telegram_is_premium is None:
-                    telegram_profile.telegram_is_premium = False
             
-            # Ensure telegram_is_bot is set
-            if not hasattr(telegram_profile, 'telegram_is_bot') or telegram_profile.telegram_is_bot is None:
-                telegram_profile.telegram_is_bot = False
+            # Always ensure telegram_is_premium is set (NOT NULL constraint)
+            # Set it explicitly to avoid None values
+            if 'telegram_is_premium' in request.data:
+                telegram_profile.telegram_is_premium = bool(request.data.get('telegram_is_premium', False))
+            else:
+                # If not provided, ensure it's set to False (not None)
+                telegram_profile.telegram_is_premium = False if telegram_profile.telegram_is_premium is None else bool(telegram_profile.telegram_is_premium)
+            
+            # Always ensure telegram_is_bot is set (NOT NULL constraint)
+            telegram_profile.telegram_is_bot = False if telegram_profile.telegram_is_bot is None else bool(telegram_profile.telegram_is_bot)
             
             # Update telegram first_name and last_name (NOT User's first_name/last_name)
             if 'first_name' in request.data:
@@ -575,16 +650,17 @@ class UserViewSet(viewsets.ModelViewSet):
                     telegram_profile.telegram_username = request.data.get('telegram_username')
                 if 'telegram_language_code' in request.data:
                     telegram_profile.telegram_language_code = request.data.get('telegram_language_code')
-                if 'telegram_is_premium' in request.data:
-                    telegram_profile.telegram_is_premium = request.data.get('telegram_is_premium', False)
-                else:
-                    # Ensure telegram_is_premium is set even if not provided
-                    if not hasattr(telegram_profile, 'telegram_is_premium') or telegram_profile.telegram_is_premium is None:
-                        telegram_profile.telegram_is_premium = False
                 
-                # Ensure telegram_is_bot is set
-                if not hasattr(telegram_profile, 'telegram_is_bot') or telegram_profile.telegram_is_bot is None:
-                    telegram_profile.telegram_is_bot = False
+                # Always ensure telegram_is_premium is set (NOT NULL constraint)
+                # Set it explicitly to avoid None values
+                if 'telegram_is_premium' in request.data:
+                    telegram_profile.telegram_is_premium = bool(request.data.get('telegram_is_premium', False))
+                else:
+                    # If not provided, ensure it's set to False (not None)
+                    telegram_profile.telegram_is_premium = False if telegram_profile.telegram_is_premium is None else bool(telegram_profile.telegram_is_premium)
+                
+                # Always ensure telegram_is_bot is set (NOT NULL constraint)
+                telegram_profile.telegram_is_bot = False if telegram_profile.telegram_is_bot is None else bool(telegram_profile.telegram_is_bot)
                 
                 telegram_profile.save()
                 
