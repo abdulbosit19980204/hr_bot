@@ -432,6 +432,15 @@ class UserViewSet(viewsets.ModelViewSet):
                 telegram_profile.telegram_language_code = request.data.get('telegram_language_code')
             if 'telegram_is_premium' in request.data:
                 telegram_profile.telegram_is_premium = request.data.get('telegram_is_premium', False)
+            else:
+                # Ensure telegram_is_premium is set even if not provided
+                if not hasattr(telegram_profile, 'telegram_is_premium') or telegram_profile.telegram_is_premium is None:
+                    telegram_profile.telegram_is_premium = False
+            
+            # Ensure telegram_is_bot is set
+            if not hasattr(telegram_profile, 'telegram_is_bot') or telegram_profile.telegram_is_bot is None:
+                telegram_profile.telegram_is_bot = False
+            
             # Update telegram first_name and last_name (NOT User's first_name/last_name)
             if 'first_name' in request.data:
                 telegram_first_name = request.data.get('first_name', '')
@@ -524,7 +533,8 @@ class UserViewSet(viewsets.ModelViewSet):
                     position_id = request.data.get('position_id')
                     if position_id:
                         try:
-                            position = Position.objects.get(id=position_id, is_open=True)
+                            # Allow setting position even if it's not open (for premium users or admin)
+                            position = Position.objects.get(id=position_id)
                             user.position = position
                         except Position.DoesNotExist:
                             pass
@@ -538,10 +548,21 @@ class UserViewSet(viewsets.ModelViewSet):
                     telegram_profile.user = user
                 except TelegramProfile.DoesNotExist:
                     # Create new profile
+                    telegram_first_name = request.data.get('telegram_first_name', '') or ''
+                    telegram_last_name = request.data.get('telegram_last_name', '') or ''
+                    if telegram_first_name is None:
+                        telegram_first_name = ''
+                    if telegram_last_name is None:
+                        telegram_last_name = ''
+                    
                     telegram_profile = TelegramProfile.objects.create(
                         user=user,
                         telegram_id=telegram_id,
-                        telegram_is_premium=False,
+                        telegram_first_name=telegram_first_name,
+                        telegram_last_name=telegram_last_name,
+                        telegram_username=request.data.get('telegram_username'),
+                        telegram_language_code=request.data.get('telegram_language_code'),
+                        telegram_is_premium=request.data.get('telegram_is_premium', False),
                         telegram_is_bot=False
                     )
                 
@@ -556,6 +577,14 @@ class UserViewSet(viewsets.ModelViewSet):
                     telegram_profile.telegram_language_code = request.data.get('telegram_language_code')
                 if 'telegram_is_premium' in request.data:
                     telegram_profile.telegram_is_premium = request.data.get('telegram_is_premium', False)
+                else:
+                    # Ensure telegram_is_premium is set even if not provided
+                    if not hasattr(telegram_profile, 'telegram_is_premium') or telegram_profile.telegram_is_premium is None:
+                        telegram_profile.telegram_is_premium = False
+                
+                # Ensure telegram_is_bot is set
+                if not hasattr(telegram_profile, 'telegram_is_bot') or telegram_profile.telegram_is_bot is None:
+                    telegram_profile.telegram_is_bot = False
                 
                 telegram_profile.save()
                 
@@ -595,7 +624,8 @@ class UserViewSet(viewsets.ModelViewSet):
             position_id = request.data.get('position_id')
             if position_id:
                 try:
-                    position = Position.objects.get(id=position_id, is_open=True)
+                    # Allow setting position even if it's not open (for premium users or admin)
+                    position = Position.objects.get(id=position_id)
                     user_data['position_id'] = position.id
                 except Position.DoesNotExist:
                     pass

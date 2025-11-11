@@ -497,6 +497,9 @@ async def complete_test(message: types.Message, state: FSMContext, notify_callba
     answers = data.get('answers', [])
     start_time = data.get('start_time', datetime.now().timestamp())
     
+    # Log answers count for debugging
+    logger.info(f"Completing test {test_id}, answers count: {len(answers)}, is_trial: {is_trial}")
+    
     # Get telegram_id from state or message
     # IMPORTANT: message.from_user.id might be bot's ID if message is from bot
     # So we should get telegram_id from state where we saved it during test start
@@ -607,19 +610,56 @@ async def complete_test(message: types.Message, state: FSMContext, notify_callba
                     except Exception as e:
                         logger.error(f"Error notifying admin about test result: {e}", exc_info=True)
                 
-                # Show results - limit message length to avoid "text is too long" error
+                # Show results - send all answers, split into multiple messages if needed
                 # Telegram allows max 4096 characters per message
                 trial_prefix = "🧪 " if is_trial else ""
-                text = f"{trial_prefix}📊 <b>Test natijalari</b>\n\n"
-                text += f"📝 Jami: {total_questions} | ✅ To'g'ri: {correct_answers} | 📈 Ball: {score}%\n\n"
                 
-                # Get detailed answers from result (limit to avoid message too long)
+                # First message: Summary
+                summary_text = f"{trial_prefix}📊 <b>Test natijalari</b>\n\n"
+                summary_text += f"📝 Jami: {total_questions} | ✅ To'g'ri: {correct_answers} | 📈 Ball: {score}%\n\n"
+                
+                # Get passing score from test_data
+                passing_score = test_data.get('passing_score', 60) if test_data else 60
+                
+                if is_passed:
+                    summary_text += "✅ <b>Tabriklaymiz! Testdan o'tdingiz!</b>"
+                    if requires_cv and not is_trial:
+                        summary_text += "\n\n📄 CV yuklash: /upload_cv yoki Menu'dan CV yuklash tugmasini bosing"
+                else:
+                    # Check if score is low but not zero
+                    if score > 0 and score < passing_score:
+                        summary_text += "❌ Testdan o'ta olmadingiz.\n\n"
+                        summary_text += "💡 Iltimos, malakangizni oshirib bizni keyingi vakansiyalarimiz uchun ariza qoldirasiz deb umid qilamiz!"
+                    else:
+                        summary_text += "❌ Testdan o'ta olmadingiz."
+                        if not is_trial:
+                            summary_text += " Keyingi safar yanada yaxshi natija olishga harakat qiling!"
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔙 Asosiy menyu", callback_data="menu_back")]
+                ])
+                
+                # Send summary message first
+                try:
+                    await message.edit_text(summary_text, reply_markup=keyboard, parse_mode="HTML")
+                except Exception as e:
+                    error_msg = str(e)
+                    if "message is not modified" not in error_msg.lower():
+                        logger.error(f"Error displaying summary: {e}", exc_info=True)
+                        try:
+                            await message.answer(summary_text, reply_markup=keyboard, parse_mode="HTML")
+                        except Exception as e2:
+                            logger.error(f"Error sending summary as new message: {e2}", exc_info=True)
+                
+                # Send detailed answers in separate messages
                 result_answers = result.get('answers', [])
                 if result_answers and len(result_answers) > 0:
-                    # Show first 5 questions to save space
-                    max_questions_to_show = min(5, len(result_answers))
-                    text += "<b>Savollar va javoblar:</b>\n\n"
-                    for idx, answer_data in enumerate(result_answers[:max_questions_to_show], 1):
+                    # Group answers into messages (max 4000 chars per message to be safe)
+                    current_message = "<b>📋 Savollar va javoblar:</b>\n\n"
+                    message_count = 0
+                    max_message_length = 4000
+                    
+                    for idx, answer_data in enumerate(result_answers, 1):
                         question_data = answer_data.get('question', {})
                         selected_option = answer_data.get('selected_option', {})
                         is_correct = answer_data.get('is_correct', False)
@@ -627,76 +667,35 @@ async def complete_test(message: types.Message, state: FSMContext, notify_callba
                         question_text = question_data.get('text', 'Savol')
                         option_text = selected_option.get('text', 'Javob topilmadi')
                         
-                        # Truncate long texts to save space
-                        if len(question_text) > 35:
-                            question_text = question_text[:35] + "..."
-                        if len(option_text) > 25:
-                            option_text = option_text[:25] + "..."
-                        
+                        # Format answer line
                         status_icon = "✅" if is_correct else "❌"
-                        text += f"{idx}. {status_icon} {question_text}\n"
-                        text += f"   {option_text}\n\n"
+                        answer_line = f"{idx}. {status_icon} <b>{question_text}</b>\n"
+                        answer_line += f"   Javob: {option_text}\n\n"
                         
-                        # Check if message is getting too long
-                        if len(text) > 3500:
-                            break
-                    
-                    if len(result_answers) > max_questions_to_show:
-                        remaining = len(result_answers) - max_questions_to_show
-                        text += f"... va yana {remaining} ta savol\n\n"
-                
-                # Get passing score from test_data
-                passing_score = test_data.get('passing_score', 60) if test_data else 60
-                
-                if is_passed:
-                    text += "✅ <b>Tabriklaymiz! Testdan o'tdingiz!</b>"
-                    if requires_cv and not is_trial:
-                        text += "\n\n📄 CV yuklash: /upload_cv yoki Menu'dan CV yuklash tugmasini bosing"
-                else:
-                    # Check if score is low but not zero
-                    if score > 0 and score < passing_score:
-                        text += "❌ Testdan o'ta olmadingiz.\n\n"
-                        text += "💡 Iltimos, malakangizni oshirib bizni keyingi vakansiyalarimiz uchun ariza qoldirasiz deb umid qilamiz!"
-                    else:
-                        text += "❌ Testdan o'ta olmadingiz."
-                        if not is_trial:
-                            text += " Keyingi safar yanada yaxshi natija olishga harakat qiling!"
-                
-                # Ensure message is not too long (Telegram limit: 4096 chars)
-                if len(text) > 4096:
-                    text = text[:4000] + "\n\n... (xabar qisqartirildi)"
-                
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 Asosiy menyu", callback_data="menu_back")]
-                ])
-                
-                logger.info(f"Displaying test results (message length: {len(text)} chars)")
-                try:
-                    # Try to edit message, but if it fails (e.g., time expired message was shown), send as new message
-                    await message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
-                except Exception as e:
-                    error_msg = str(e)
-                    # Check if it's "message is not modified" error - ignore it
-                    if "message is not modified" in error_msg.lower():
-                        logger.info("Message not modified (same content) - ignoring error")
-                        return
-                    
-                    logger.error(f"Error displaying results: {e}", exc_info=True)
-                    # Try sending as new message if edit fails (e.g., if time expired message was shown)
-                    try:
-                        await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
-                    except Exception as e2:
-                        logger.error(f"Error sending results as new message: {e2}", exc_info=True)
-                        # Send simplified message
-                        simple_text = (
-                            f"{trial_prefix}📊 <b>Test natijalari</b>\n\n"
-                            f"📝 Jami: {total_questions} | ✅ To'g'ri: {correct_answers} | 📈 Ball: {score}%\n\n"
-                        )
-                        if is_passed:
-                            simple_text += "✅ <b>Tabriklaymiz! Testdan o'tdingiz!</b>"
+                        # Check if adding this answer would exceed message limit
+                        if len(current_message) + len(answer_line) > max_message_length:
+                            # Send current message and start new one
+                            try:
+                                await message.answer(current_message, parse_mode="HTML")
+                                message_count += 1
+                            except Exception as e:
+                                logger.error(f"Error sending answer message {message_count + 1}: {e}", exc_info=True)
+                            
+                            # Start new message
+                            current_message = f"<b>📋 Savollar va javoblar (davomi):</b>\n\n"
+                            current_message += answer_line
                         else:
-                            simple_text += "❌ Testdan o'ta olmadingiz."
-                        await message.answer(simple_text, reply_markup=keyboard, parse_mode="HTML")
+                            current_message += answer_line
+                    
+                    # Send remaining answers if any
+                    if len(current_message) > len("<b>📋 Savollar va javoblar (davomi):</b>\n\n"):
+                        try:
+                            await message.answer(current_message, parse_mode="HTML")
+                            message_count += 1
+                        except Exception as e:
+                            logger.error(f"Error sending final answer message: {e}", exc_info=True)
+                    
+                    logger.info(f"Sent {message_count} detailed answer messages")
                 
                 # Request CV upload if passed (not for trial tests)
                 if is_passed and requires_cv and not is_trial:

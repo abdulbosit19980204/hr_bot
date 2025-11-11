@@ -419,11 +419,15 @@ async def process_email(message: types.Message, state: FSMContext):
 
 
 async def show_positions(message: types.Message, state: FSMContext):
-    """Show available positions - faqat ochiq positionlarni ko'rsatadi"""
+    """Show available positions - premium userlar uchun barcha lavozimlarni ko'rsatadi"""
     async with aiohttp.ClientSession() as session:
         try:
-            # Faqat ochiq positionlarni olish (API'dan is_open=true filter bilan)
-            async with session.get(f"{API_BASE_URL}/positions/?is_open=true") as resp:
+            # Check if user is premium
+            is_premium = getattr(message.from_user, 'is_premium', False)
+            
+            # Premium userlar uchun barcha lavozimlarni olish, oddiy userlar uchun faqat ochiq lavozimlar
+            url = f"{API_BASE_URL}/positions/" if is_premium else f"{API_BASE_URL}/positions/?is_open=true"
+            async with session.get(url) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     
@@ -440,16 +444,25 @@ async def show_positions(message: types.Message, state: FSMContext):
                     if not isinstance(positions, list):
                         positions = []
                     
-                    # Double check - faqat ochiq positionlarni filter qilish
-                    open_positions = [p for p in positions if isinstance(p, dict) and p.get('is_open', True)]
+                    # Premium userlar uchun barcha lavozimlarni ko'rsatish, oddiy userlar uchun faqat ochiq lavozimlar
+                    if is_premium:
+                        filtered_positions = positions
+                    else:
+                        filtered_positions = [p for p in positions if isinstance(p, dict) and p.get('is_open', True)]
                     
-                    if open_positions and len(open_positions) > 0:
+                    if filtered_positions and len(filtered_positions) > 0:
                         keyboard = InlineKeyboardMarkup(inline_keyboard=[])
                         
-                        for position in open_positions:
+                        for position in filtered_positions:
                             position_id = position.get('id')
                             position_name = position.get('name', 'Position')
+                            is_open = position.get('is_open', True)
+                            
                             if position_id:
+                                # Premium userlar uchun yopiq lavozimlarni ham ko'rsatish
+                                if is_premium and not is_open:
+                                    position_name = f"🔒 {position_name} (Yopiq)"
+                                
                                 keyboard.inline_keyboard.append([
                                     InlineKeyboardButton(
                                         text=f"💼 {position_name}",
@@ -457,15 +470,17 @@ async def show_positions(message: types.Message, state: FSMContext):
                                     )
                                 ])
                         
-                        await message.answer(
-                            "💼 Qaysi lavozimga ariza topshirmoqchisiz?\n\n"
-                            "Quyidagi ochiq lavozimlardan birini tanlang:",
-                            reply_markup=keyboard
-                        )
+                        message_text = "💼 Qaysi lavozimga ariza topshirmoqchisiz?\n\n"
+                        if is_premium:
+                            message_text += "Quyidagi lavozimlardan birini tanlang (yopiq lavozimlar ham ko'rsatilgan):"
+                        else:
+                            message_text += "Quyidagi ochiq lavozimlardan birini tanlang:"
+                        
+                        await message.answer(message_text, reply_markup=keyboard)
                         await state.set_state(UserRegistration.selecting_position)
                     else:
                         await message.answer(
-                            "ℹ️ Hozircha ochiq lavozimlar mavjud emas.\n"
+                            "ℹ️ Hozircha lavozimlar mavjud emas.\n"
                             "Iltimos, keyinroq qayta urinib ko'ring."
                         )
                         await state.clear()
@@ -494,7 +509,11 @@ async def process_position_selection(callback: types.CallbackQuery, state: FSMCo
                     return
                 
                 position_data = await pos_resp.json()
-                if not position_data.get('is_open', False):
+                # Check if user is premium
+                is_premium = getattr(callback.from_user, 'is_premium', False)
+                
+                # Premium userlar uchun yopiq lavozimlarni ham tanlash mumkin
+                if not position_data.get('is_open', False) and not is_premium:
                     await callback.answer("❌ Bu lavozim yopiq. Faqat ochiq lavozimlarga hujjat topshirish mumkin", show_alert=True)
                     return
                 
@@ -2009,7 +2028,11 @@ async def process_edit_position_selection(callback: types.CallbackQuery, state: 
                     return
                 
                 position_data = await pos_resp.json()
-                if not position_data.get('is_open', False):
+                # Check if user is premium
+                is_premium = getattr(callback.from_user, 'is_premium', False)
+                
+                # Premium userlar uchun yopiq lavozimlarni ham tanlash mumkin
+                if not position_data.get('is_open', False) and not is_premium:
                     await callback.answer("❌ Bu lavozim yopiq.", show_alert=True)
                     return
                 

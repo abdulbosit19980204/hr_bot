@@ -239,6 +239,9 @@ class TestResultCreateSerializer(serializers.Serializer):
         except Test.DoesNotExist:
             raise serializers.ValidationError("Test not found or inactive")
 
+        # Get is_trial from validated_data BEFORE using it
+        is_trial = validated_data.get('is_trial', False)
+
         # Get or create test result
         if result_id:
             # Resume existing test
@@ -279,7 +282,7 @@ class TestResultCreateSerializer(serializers.Serializer):
         
         # Get questions based on the answers submitted (not random)
         # This ensures we check the same questions that were shown to the user
-        is_trial = validated_data.get('is_trial', False)
+        # is_trial already defined above
         
         # Determine total questions count (how many questions should be shown to user)
         # This is used for score calculation - score should be based on total questions, not answered questions
