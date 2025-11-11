@@ -643,14 +643,12 @@ async def show_main_menu(message: types.Message, user_data: dict = None):
         position_id = None
     
     # Create menu keyboard (ReplyKeyboardMarkup - oddiy menu buttonlar)
+    # Buttonlarni 2 qatorga joylashtirish (har bir qatorda 2 ta button)
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📝 Test topshirish")],
-            [KeyboardButton(text="🧪 Trial test")],
-            [KeyboardButton(text="👤 Profilni tahrirlash")],
-            [KeyboardButton(text="📊 Natijalarim")],
-            [KeyboardButton(text="ℹ️ Profil ma'lumotlari")],
-            [KeyboardButton(text="📄 CV yuklash")],
+            [KeyboardButton(text="📝 Test topshirish"), KeyboardButton(text="🧪 Trial test")],
+            [KeyboardButton(text="👤 Profilni tahrirlash"), KeyboardButton(text="📊 Natijalarim")],
+            [KeyboardButton(text="ℹ️ Profil ma'lumotlari"), KeyboardButton(text="📄 CV yuklash")],
         ],
         resize_keyboard=True,
         persistent=True
