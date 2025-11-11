@@ -3,35 +3,120 @@ import axios from 'axios'
 import './TestPage.css'
 
 function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
-  const [questions, setQuestions] = useState([])
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
-  const [answers, setAnswers] = useState({})
-  const [timeLeft, setTimeLeft] = useState(test.time_limit * 60) // Convert to seconds
-  const [loading, setLoading] = useState(true)
+  const STORAGE_KEY = `test_state_${test.id}_${user?.telegram_id || 'anonymous'}`
+  
+  // Load state from localStorage (defined before useState to use in initializer)
+  const loadState = () => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        const state = JSON.parse(saved)
+        // Check if state is for current test and not expired (older than 24 hours)
+        if (state.testId === test.id && state.telegramId === (user?.telegram_id || 'anonymous')) {
+          const stateAge = Date.now() - state.timestamp
+          const maxAge = 24 * 60 * 60 * 1000 // 24 hours
+          if (stateAge < maxAge) {
+            return state
+          } else {
+            // State expired, remove it
+            localStorage.removeItem(STORAGE_KEY)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading state:', error)
+    }
+    return null
+  }
+
+  // Try to restore startTime from saved state
+  const initialSavedState = loadState()
+  const initialStartTime = initialSavedState?.startTime || Date.now()
+  const initialTimeLeft = initialSavedState ? (() => {
+    const elapsed = Math.floor((Date.now() - initialSavedState.startTime) / 1000)
+    const totalTime = test.time_limit * 60
+    return Math.max(0, totalTime - elapsed)
+  })() : test.time_limit * 60
+  
+  const [questions, setQuestions] = useState(initialSavedState?.questions || [])
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(initialSavedState?.currentQuestionIndex || 0)
+  const [answers, setAnswers] = useState(initialSavedState?.answers || {})
+  const [timeLeft, setTimeLeft] = useState(initialTimeLeft)
+  const [loading, setLoading] = useState(!initialSavedState) // If we have saved state, don't show loading
   const [submitting, setSubmitting] = useState(false)
-  const [startTime] = useState(Date.now())
-  const [showLeaveModal, setShowLeaveModal] = useState(false)
-  const [attemptedLeave, setAttemptedLeave] = useState(false)
+  const [startTime, setStartTime] = useState(initialStartTime)
   const [leaveAttempts, setLeaveAttempts] = useState(0)
   const [isBlocked, setIsBlocked] = useState(false)
   const testContainerRef = useRef(null)
 
+  // Save state to localStorage
+  const saveState = (stateUpdates = {}) => {
+    try {
+      const currentState = {
+        testId: test.id,
+        telegramId: user?.telegram_id || 'anonymous',
+        questions: questions,
+        currentQuestionIndex: currentQuestionIndex,
+        answers: answers,
+        startTime: startTime,
+        isTrial: isTrial,
+        timestamp: Date.now(),
+        ...stateUpdates
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentState))
+    } catch (error) {
+      console.error('Error saving state:', error)
+    }
+  }
+
+  // Clear state from localStorage
+  const clearState = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch (error) {
+      console.error('Error clearing state:', error)
+    }
+  }
+
   useEffect(() => {
-    loadQuestions()
+    // If we don't have saved state, load questions from API
+    if (!initialSavedState || !initialSavedState.questions || initialSavedState.questions.length === 0) {
+      loadQuestions()
+    }
     setupCheatingProtection()
     return () => {
       cleanupCheatingProtection()
     }
   }, [])
 
+  // Save state whenever it changes
   useEffect(() => {
-    if (timeLeft > 0 && !submitting) {
-      const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000)
+    if (questions.length > 0 && !submitting) {
+      saveState({
+        questions: questions,
+        currentQuestionIndex: currentQuestionIndex,
+        answers: answers
+      })
+    }
+  }, [questions, currentQuestionIndex, answers, submitting])
+
+  useEffect(() => {
+    if (timeLeft > 0 && !submitting && !loading) {
+      const timer = setTimeout(() => {
+        setTimeLeft(prev => {
+          const newTime = prev - 1
+          // Save updated time to state
+          if (newTime > 0) {
+            saveState()
+          }
+          return newTime
+        })
+      }, 1000)
       return () => clearTimeout(timer)
-    } else if (timeLeft === 0 && !submitting) {
+    } else if (timeLeft === 0 && !submitting && !loading) {
       handleSubmit()
     }
-  }, [timeLeft, submitting])
+  }, [timeLeft, submitting, loading])
 
   // Cheating protection: Disable copy, paste, select, context menu
   const setupCheatingProtection = () => {
@@ -43,10 +128,8 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
     document.addEventListener('contextmenu', preventContextMenu)
     document.addEventListener('keydown', handleKeyDown)
     
-    // Prevent page leave
+    // Prevent page leave - only beforeunload (real page leave)
     window.addEventListener('beforeunload', handleBeforeUnload)
-    window.addEventListener('blur', handleBlur)
-    window.addEventListener('focus', handleFocus)
     
     // Disable right click
     document.addEventListener('mousedown', handleMouseDown)
@@ -66,8 +149,6 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
     document.removeEventListener('contextmenu', preventContextMenu)
     document.removeEventListener('keydown', handleKeyDown)
     window.removeEventListener('beforeunload', handleBeforeUnload)
-    window.removeEventListener('blur', handleBlur)
-    window.removeEventListener('focus', handleFocus)
     document.removeEventListener('mousedown', handleMouseDown)
     document.removeEventListener('keydown', handleDevTools)
     document.removeEventListener('dragstart', preventDrag)
@@ -137,7 +218,7 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
     }
   }
 
-  const handleBeforeUnload = async (e) => {
+  const handleBeforeUnload = (e) => {
     if (!submitting && !isBlocked) {
       e.preventDefault()
       e.returnValue = 'Siz testni tark etmoqchisiz. Agar testni tark etsangiz, siz block qilinasiz va vakansiyangiz ko\'rib chiqishdan to\'xtatiladi. Davom etasizmi?'
@@ -146,98 +227,39 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
       setLeaveAttempts(newAttempts)
       
       // Notify backend about page leave attempt
-      await notifyPageLeaveAttempt(newAttempts)
+      // Use fetch with keepalive to ensure request completes even if page closes
+      fetch(`${apiBaseUrl}/tests/${test.id}/notify_page_leave/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telegram_id: user.telegram_id,
+          attempts: newAttempts,
+          test_id: test.id
+        }),
+        keepalive: true
+      }).catch(() => {}) // Ignore errors - page might be closing
       
-      // If 2+ attempts, block user and stop test
+      // If 2+ attempts, block user immediately
       if (newAttempts >= 2) {
         setIsBlocked(true)
-        await blockUserAndStopTest('Test tark etildi (cheating) - 2+ marta urinish')
+        // Block user before page closes
+        fetch(`${apiBaseUrl}/tests/${test.id}/block_user/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            telegram_id: user.telegram_id,
+            reason: 'Test tark etildi (cheating) - 2+ marta urinish'
+          }),
+          keepalive: true
+        }).catch(() => {}) // Ignore errors - page might be closing
+        
         return e.returnValue
       }
       
-      setShowLeaveModal(true)
-      setAttemptedLeave(true)
       return e.returnValue
     }
   }
 
-  const handleBlur = async () => {
-    if (!submitting && !isBlocked && !attemptedLeave) {
-      const newAttempts = leaveAttempts + 1
-      setLeaveAttempts(newAttempts)
-      
-      // Notify backend about page leave attempt
-      await notifyPageLeaveAttempt(newAttempts)
-      
-      // If 2+ attempts, block user and stop test
-      if (newAttempts >= 2) {
-        setIsBlocked(true)
-        await blockUserAndStopTest('Test tark etildi (cheating) - 2+ marta urinish')
-        return
-      }
-      
-      setShowLeaveModal(true)
-      setAttemptedLeave(true)
-    }
-  }
-
-  const handleFocus = () => {
-    if (attemptedLeave && !submitting && !isBlocked) {
-      setShowLeaveModal(true)
-    }
-  }
-  
-  const notifyPageLeaveAttempt = async (attempts) => {
-    try {
-      await axios.post(`${apiBaseUrl}/tests/${test.id}/notify_page_leave/`, {
-        telegram_id: user.telegram_id,
-        attempts: attempts,
-        test_id: test.id
-      })
-    } catch (error) {
-      console.error('Error notifying page leave attempt:', error)
-    }
-  }
-  
-  const blockUserAndStopTest = async (reason) => {
-    try {
-      // Block user
-      await blockUser(reason)
-      
-      // Stop test - submit with empty answers
-      setSubmitting(true)
-      cleanupCheatingProtection()
-      
-      // Notify user
-      alert('⚠️ Siz testni tark etganingiz uchun block qilindingiz va test to\'xtatildi!')
-      
-      // Close WebApp
-      if (window.Telegram && window.Telegram.WebApp) {
-        window.Telegram.WebApp.close()
-      } else {
-        window.close()
-      }
-    } catch (error) {
-      console.error('Error blocking user and stopping test:', error)
-    }
-  }
-
-  const handleConfirmLeave = async () => {
-    setShowLeaveModal(false)
-    setIsBlocked(true)
-    const newAttempts = leaveAttempts + 1
-    
-    // Notify backend about page leave attempt
-    await notifyPageLeaveAttempt(newAttempts)
-    
-    // Block user and stop test
-    await blockUserAndStopTest('Test tark etildi (cheating) - foydalanuvchi tasdiqladi')
-  }
-
-  const handleCancelLeave = () => {
-    setShowLeaveModal(false)
-    setAttemptedLeave(false)
-  }
 
   const blockUser = async (reason) => {
     try {
@@ -263,11 +285,17 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
       const response = await axios.get(
         `${apiBaseUrl}/tests/${test.id}/questions/?${params.toString()}`
       )
-      setQuestions(response.data)
+      const loadedQuestions = response.data
+      setQuestions(loadedQuestions)
+      
+      // Save questions to state immediately
+      saveState({ questions: loadedQuestions })
+      
       setLoading(false)
     } catch (error) {
       console.error('Error loading questions:', error)
       if (error.response?.status === 403) {
+        clearState() // Clear state if blocked
         alert('Siz block qilingansiz: ' + (error.response?.data?.reason || 'Noma\'lum sabab'))
         if (window.Telegram && window.Telegram.WebApp) {
           window.Telegram.WebApp.close()
@@ -278,21 +306,30 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
   }
 
   const handleAnswerSelect = (questionId, optionId) => {
-    setAnswers({
+    const newAnswers = {
       ...answers,
       [questionId]: optionId
-    })
+    }
+    setAnswers(newAnswers)
+    // Save state immediately when answer is selected
+    saveState({ answers: newAnswers })
   }
 
   const handleNext = () => {
     if (currentQuestionIndex < questions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1)
+      const newIndex = currentQuestionIndex + 1
+      setCurrentQuestionIndex(newIndex)
+      // Save state immediately when navigating
+      saveState({ currentQuestionIndex: newIndex })
     }
   }
 
   const handlePrevious = () => {
     if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex(currentQuestionIndex - 1)
+      const newIndex = currentQuestionIndex - 1
+      setCurrentQuestionIndex(newIndex)
+      // Save state immediately when navigating
+      saveState({ currentQuestionIndex: newIndex })
     }
   }
 
@@ -301,6 +338,9 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
 
     setSubmitting(true)
     cleanupCheatingProtection() // Allow normal behavior after submission
+    
+    // Clear saved state after submission
+    clearState()
     
     try {
       const timeTaken = Math.floor((Date.now() - startTime) / 1000)
@@ -319,15 +359,18 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
         is_trial: isTrial
       })
 
+      // Clear state after successful submission
+      clearState()
       onComplete(response.data)
     } catch (error) {
       console.error('Error submitting test:', error)
       if (error.response?.status === 403) {
+        clearState() // Clear state even on error
         alert('Siz block qilingansiz: ' + (error.response?.data?.reason || 'Noma\'lum sabab'))
       } else {
         alert('Testni yuborishda xatolik yuz berdi')
+        setSubmitting(false) // Allow retry if not blocked
       }
-      setSubmitting(false)
     }
   }
 
@@ -352,33 +395,6 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
 
   return (
     <div ref={testContainerRef} className="test-container" style={{ userSelect: 'none' }}>
-      {/* Leave Warning Modal */}
-      {showLeaveModal && !isBlocked && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <h3>⚠️ Ogohlantirish</h3>
-            <p>
-              Siz testni tark etmoqchisiz. Agar testni tark etsangiz, siz block qilinasiz va vakansiyangiz ko'rib chiqishdan to'xtatiladi.
-            </p>
-            {leaveAttempts > 0 && (
-              <p style={{ color: leaveAttempts >= 2 ? '#dc3545' : '#ff9800', fontWeight: 'bold', marginTop: '10px' }}>
-                ⚠️ Urinishlar soni: {leaveAttempts} / 2
-                {leaveAttempts >= 2 && ' - Keyingi urinishda siz avtomatik block qilinasiz!'}
-              </p>
-            )}
-            <p><strong>Haqiqatdan ham testni tark etmoqchimisiz?</strong></p>
-            <div className="modal-buttons">
-              <button className="btn btn-danger" onClick={handleConfirmLeave}>
-                Ha, tark etish
-              </button>
-              <button className="btn btn-secondary" onClick={handleCancelLeave}>
-                Bekor qilish
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
       {/* Blocked Modal */}
       {isBlocked && (
         <div className="modal-overlay" style={{ zIndex: 10000 }}>

@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -642,15 +642,19 @@ async def show_main_menu(message: types.Message, user_data: dict = None):
     else:
         position_id = None
     
-    # Create menu keyboard
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📝 Test topshirish", callback_data="menu_apply")],
-        [InlineKeyboardButton(text="🧪 Trial test", callback_data="menu_trial")],
-        [InlineKeyboardButton(text="👤 Profilni tahrirlash", callback_data="menu_edit_profile")],
-        [InlineKeyboardButton(text="📊 Natijalarim", callback_data="menu_results")],
-        [InlineKeyboardButton(text="ℹ️ Profil ma'lumotlari", callback_data="menu_profile_info")],
-        [InlineKeyboardButton(text="📄 CV yuklash", callback_data="menu_upload_cv")],
-    ])
+    # Create menu keyboard (ReplyKeyboardMarkup - oddiy menu buttonlar)
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📝 Test topshirish")],
+            [KeyboardButton(text="🧪 Trial test")],
+            [KeyboardButton(text="👤 Profilni tahrirlash")],
+            [KeyboardButton(text="📊 Natijalarim")],
+            [KeyboardButton(text="ℹ️ Profil ma'lumotlari")],
+            [KeyboardButton(text="📄 CV yuklash")],
+        ],
+        resize_keyboard=True,
+        persistent=True
+    )
     
     # User info text
     first_name = user_data.get('first_name', '')
@@ -1192,14 +1196,14 @@ async def show_profile_edit_menu(message: types.Message, user_data: dict):
 
 
 # Menu callbacks
-@dp.callback_query(lambda c: c.data == "menu_apply")
-async def menu_apply(callback: types.CallbackQuery):
+@dp.message(lambda m: m.text == "📝 Test topshirish")
+async def menu_apply(message: types.Message):
     """Apply for test from menu"""
-    user = callback.from_user
+    user = message.from_user
     user_data = await get_or_create_user(user.id, user.first_name, user.last_name)
     
     if not user_data or not user_data.get('position'):
-        await callback.answer("⚠️ Profilingiz to'liq emas. Iltimos, /start buyrug'ini yuboring.", show_alert=True)
+        await message.answer("⚠️ Profilingiz to'liq emas. Iltimos, /start buyrug'ini yuboring.")
         return
     
     position = user_data.get('position')
@@ -1209,33 +1213,28 @@ async def menu_apply(callback: types.CallbackQuery):
         position_id = None
     
     if position_id:
-        await callback.message.delete()
-        await show_tests_for_position(callback.message, position_id, user_data)
+        await show_tests_for_position(message, position_id, user_data)
     else:
-        await callback.answer("⚠️ Lavozimingiz belgilanmagan.", show_alert=True)
-    
-    await callback.answer()
+        await message.answer("⚠️ Lavozimingiz belgilanmagan.")
 
 
-@dp.callback_query(lambda c: c.data == "menu_edit_profile")
-async def menu_edit_profile(callback: types.CallbackQuery):
+@dp.message(lambda m: m.text == "👤 Profilni tahrirlash")
+async def menu_edit_profile(message: types.Message):
     """Edit profile from menu"""
-    user = callback.from_user
+    user = message.from_user
     user_data = await get_or_create_user(user.id, user.first_name, user.last_name)
     
     if not user_data:
-        await callback.answer("❌ Xatolik yuz berdi.", show_alert=True)
+        await message.answer("❌ Xatolik yuz berdi.")
         return
     
-    await callback.message.delete()
-    await show_profile_edit_menu(callback.message, user_data)
-    await callback.answer()
+    await show_profile_edit_menu(message, user_data)
 
 
-@dp.callback_query(lambda c: c.data == "menu_results")
-async def menu_results(callback: types.CallbackQuery):
+@dp.message(lambda m: m.text == "📊 Natijalarim")
+async def menu_results(message: types.Message):
     """Show results from menu"""
-    telegram_id = callback.from_user.id
+    telegram_id = message.from_user.id
     
     async with aiohttp.ClientSession() as session:
         async with session.get(
@@ -1272,29 +1271,21 @@ async def menu_results(callback: types.CallbackQuery):
                             text += f"{status_emoji} <b>{test_title}</b>\n"
                             text += f"   Ball: {score}%\n\n"
                     
-                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="🔙 Orqaga", callback_data="menu_back")]
-                    ])
-                    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+                    await message.answer(text, parse_mode="HTML")
                 else:
-                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="🔙 Orqaga", callback_data="menu_back")]
-                    ])
-                    await callback.message.edit_text("ℹ️ Siz hali test topshirmadingiz.", reply_markup=keyboard)
+                    await message.answer("ℹ️ Siz hali test topshirmadingiz.")
             else:
-                await callback.message.edit_text("❌ Xatolik yuz berdi.")
-    
-    await callback.answer()
+                await message.answer("❌ Xatolik yuz berdi.")
 
 
-@dp.callback_query(lambda c: c.data == "menu_profile_info")
-async def menu_profile_info(callback: types.CallbackQuery):
+@dp.message(lambda m: m.text == "ℹ️ Profil ma'lumotlari")
+async def menu_profile_info(message: types.Message):
     """Show profile info from menu"""
-    user = callback.from_user
+    user = message.from_user
     user_data = await get_or_create_user(user.id, user.first_name, user.last_name)
     
     if not user_data:
-        await callback.answer("❌ Xatolik yuz berdi.", show_alert=True)
+        await message.answer("❌ Xatolik yuz berdi.")
         return
     
     position = user_data.get('position')
@@ -1309,7 +1300,7 @@ async def menu_profile_info(callback: types.CallbackQuery):
     last_name = user_data.get('last_name', '')
     email = user_data.get('email', 'Belgilanmagan')
     phone = user_data.get('phone', 'Belgilanmagan')
-    telegram_id = user_data.get('telegram_id', callback.from_user.id)
+    telegram_id = user_data.get('telegram_id', message.from_user.id)
     
     text = (
         f"👤 <b>Profil ma'lumotlari</b>\n\n"
@@ -1321,22 +1312,17 @@ async def menu_profile_info(callback: types.CallbackQuery):
         f"Profilni tahrirlash uchun /profile buyrug'ini yuboring."
     )
     
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 Orqaga", callback_data="menu_back")]
-    ])
-    
-    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
-    await callback.answer()
+    await message.answer(text, parse_mode="HTML")
 
 
-@dp.callback_query(lambda c: c.data == "menu_trial")
-async def menu_trial(callback: types.CallbackQuery):
+@dp.message(lambda m: m.text == "🧪 Trial test")
+async def menu_trial(message: types.Message):
     """Show trial tests menu"""
-    user = callback.from_user
+    user = message.from_user
     user_data = await get_or_create_user(user.id, user.first_name, user.last_name)
     
     if not user_data or not user_data.get('position'):
-        await callback.answer("⚠️ Profilingiz to'liq emas", show_alert=True)
+        await message.answer("⚠️ Profilingiz to'liq emas")
         return
     
     position = user_data.get('position')
@@ -1346,11 +1332,9 @@ async def menu_trial(callback: types.CallbackQuery):
         position_id = None
     
     if position_id:
-        await show_trial_tests(callback.message, position_id, user_data)
+        await show_trial_tests(message, position_id, user_data)
     else:
-        await callback.answer("⚠️ Lavozimingiz belgilanmagan", show_alert=True)
-    
-    await callback.answer()
+        await message.answer("⚠️ Lavozimingiz belgilanmagan")
 
 
 @dp.callback_query(lambda c: c.data.startswith("trial_test_"))
@@ -1452,10 +1436,10 @@ async def menu_back(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.callback_query(lambda c: c.data == "menu_upload_cv")
-async def menu_upload_cv(callback: types.CallbackQuery):
+@dp.message(lambda m: m.text == "📄 CV yuklash")
+async def menu_upload_cv(message: types.Message):
     """Handle CV upload from menu"""
-    telegram_id = callback.from_user.id
+    telegram_id = message.from_user.id
     
     # Check if user has passed any test
     async with aiohttp.ClientSession() as session:
@@ -1482,24 +1466,21 @@ async def menu_upload_cv(callback: types.CallbackQuery):
                             break
                 
                 if not has_passed:
-                    await callback.answer(
+                    await message.answer(
                         "⚠️ Siz avval testdan o'tishingiz kerak!\n\n"
-                        "CV yuklash uchun kamida bitta testdan muvaffaqiyatli o'tishingiz kerak.",
-                        show_alert=True
+                        "CV yuklash uchun kamida bitta testdan muvaffaqiyatli o'tishingiz kerak."
                     )
                     return
                 
                 # User has passed, request CV upload
-                await callback.message.edit_text(
+                await message.answer(
                     "📄 <b>CV yuklash</b>\n\n"
                     "CV faylingizni yuboring (PDF, DOC, DOCX formatida).\n\n"
                     "Yoki /upload_cv buyrug'ini yuboring.",
                     parse_mode="HTML"
                 )
             else:
-                await callback.answer("❌ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.", show_alert=True)
-    
-    await callback.answer()
+                await message.answer("❌ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.")
 
 
 @dp.message(Command("upload_cv"))
