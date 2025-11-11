@@ -1226,8 +1226,38 @@ async def cmd_results(message: types.Message):
                             score = result.get('score', 0)
                             is_passed = result.get('is_passed', False)
                             status_emoji = "✅" if is_passed else "❌"
+                            
+                            # Get time taken and completed_at
+                            time_taken = result.get('time_taken', 0)
+                            completed_at = result.get('completed_at')
+                            is_trial = result.get('is_trial', False)
+                            
+                            # Format time taken
+                            minutes = time_taken // 60
+                            seconds = time_taken % 60
+                            time_str = f"{minutes} daqiqa {seconds} soniya" if minutes > 0 else f"{seconds} soniya"
+                            
+                            # Format completed_at date
+                            date_str = ""
+                            if completed_at:
+                                try:
+                                    # Parse ISO format datetime
+                                    dt = datetime.fromisoformat(completed_at.replace('Z', '+00:00'))
+                                    date_str = dt.strftime('%Y-%m-%d %H:%M')
+                                except:
+                                    date_str = completed_at[:16] if len(completed_at) > 16 else completed_at
+                            
+                            # Trial or regular test indicator
+                            test_type = "🧪 Trial" if is_trial else "📝 Haqiqiy"
+                            
                             text += f"{status_emoji} <b>{test_title}</b>\n"
-                            text += f"   Ball: {score}%\n\n"
+                            text += f"   {test_type} test\n"
+                            text += f"   Ball: {score}%\n"
+                            if time_str:
+                                text += f"   ⏱️ Vaqt: {time_str}\n"
+                            if date_str:
+                                text += f"   📅 Sana: {date_str}\n"
+                            text += "\n"
                     
                     await message.answer(text, parse_mode="HTML")
                 else:
@@ -1328,8 +1358,38 @@ async def menu_results(message: types.Message):
                             score = result.get('score', 0)
                             is_passed = result.get('is_passed', False)
                             status_emoji = "✅" if is_passed else "❌"
+                            
+                            # Get time taken and completed_at
+                            time_taken = result.get('time_taken', 0)
+                            completed_at = result.get('completed_at')
+                            is_trial = result.get('is_trial', False)
+                            
+                            # Format time taken
+                            minutes = time_taken // 60
+                            seconds = time_taken % 60
+                            time_str = f"{minutes} daqiqa {seconds} soniya" if minutes > 0 else f"{seconds} soniya"
+                            
+                            # Format completed_at date
+                            date_str = ""
+                            if completed_at:
+                                try:
+                                    # Parse ISO format datetime
+                                    dt = datetime.fromisoformat(completed_at.replace('Z', '+00:00'))
+                                    date_str = dt.strftime('%Y-%m-%d %H:%M')
+                                except:
+                                    date_str = completed_at[:16] if len(completed_at) > 16 else completed_at
+                            
+                            # Trial or regular test indicator
+                            test_type = "🧪 Trial" if is_trial else "📝 Haqiqiy"
+                            
                             text += f"{status_emoji} <b>{test_title}</b>\n"
-                            text += f"   Ball: {score}%\n\n"
+                            text += f"   {test_type} test\n"
+                            text += f"   Ball: {score}%\n"
+                            if time_str:
+                                text += f"   ⏱️ Vaqt: {time_str}\n"
+                            if date_str:
+                                text += f"   📅 Sana: {date_str}\n"
+                            text += "\n"
                     
                     await message.answer(text, parse_mode="HTML")
                 else:

@@ -78,6 +78,7 @@ class TestResult(models.Model):
     time_taken = models.IntegerField(help_text=_('Time taken in seconds'), verbose_name=_('Time Taken'))
     attempt_number = models.IntegerField(default=1, verbose_name=_('Attempt Number'), help_text=_('Qaysi urinish'))
     is_completed = models.BooleanField(default=False, verbose_name=_('Is Completed'), help_text=_('Test yakunlanganmi'))
+    is_trial = models.BooleanField(default=False, verbose_name=_('Is Trial'), help_text=_('Trial testmi yoki haqiqiy testmi'))
 
     class Meta:
         verbose_name = _('Test Result')

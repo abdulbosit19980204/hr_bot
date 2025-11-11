@@ -131,6 +131,10 @@ class TestViewSet(viewsets.ModelViewSet):
             if len(questions) > test.random_questions_count:
                 questions = random.sample(questions, test.random_questions_count)
         
+        # Shuffle questions order randomly
+        questions = list(questions)
+        random.shuffle(questions)
+        
         serializer = QuestionSerializer(questions, many=True)
         return Response(serializer.data)
     
@@ -241,6 +245,7 @@ class TestViewSet(viewsets.ModelViewSet):
                     time_taken=0,
                     attempt_number=attempt_number,
                     is_completed=False,
+                    is_trial=is_trial,
                     started_at=timezone.now()
                 )
                 

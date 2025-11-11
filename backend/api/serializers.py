@@ -29,6 +29,17 @@ class QuestionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Question
         fields = ['id', 'text', 'order', 'options']
+    
+    def to_representation(self, instance):
+        """Randomize options order"""
+        import random
+        data = super().to_representation(instance)
+        options = data.get('options', [])
+        if options:
+            # Shuffle options randomly
+            random.shuffle(options)
+            data['options'] = options
+        return data
 
 
 class TestSerializer(serializers.ModelSerializer):
@@ -46,16 +57,20 @@ class TestSerializer(serializers.ModelSerializer):
     
     def to_representation(self, instance):
         """Random questions tanlash va test mode'ga qarab filter qilish"""
+        import random
         data = super().to_representation(instance)
         questions = data.get('questions', [])
         
         # Random questions count
         random_count = instance.random_questions_count
         if random_count > 0 and len(questions) > random_count:
-            import random
             questions = random.sample(questions, random_count)
-            data['questions'] = questions
         
+        # Shuffle questions order randomly
+        if questions:
+            random.shuffle(questions)
+        
+        data['questions'] = questions
         return data
 
 
@@ -162,9 +177,9 @@ class TestResultSerializer(serializers.ModelSerializer):
         model = TestResult
         fields = ['id', 'user', 'test', 'score', 'total_questions', 'correct_answers', 
                   'started_at', 'completed_at', 'time_taken', 'is_passed', 'attempt_number', 
-                  'is_completed', 'answers']
+                  'is_completed', 'is_trial', 'answers']
         read_only_fields = ['started_at', 'completed_at', 'time_taken', 'score', 
-                           'total_questions', 'correct_answers', 'is_passed', 'attempt_number', 'is_completed']
+                           'total_questions', 'correct_answers', 'is_passed', 'attempt_number', 'is_completed', 'is_trial']
 
 
 class TestResultCreateSerializer(serializers.Serializer):
@@ -243,6 +258,7 @@ class TestResultCreateSerializer(serializers.Serializer):
                 time_taken=0,
                 attempt_number=attempt_number,
                 is_completed=False,
+                is_trial=is_trial,
                 started_at=timezone.now()
             )
 
@@ -389,6 +405,7 @@ class TestResultCreateSerializer(serializers.Serializer):
         score = int((correct_answers / total_questions_count) * 100) if total_questions_count > 0 else 0
         result.score = score
         result.correct_answers = correct_answers
+        result.is_trial = is_trial
         # total_questions already set above to total_questions_count
         result.completed_at = timezone.now()
         result.is_completed = True
