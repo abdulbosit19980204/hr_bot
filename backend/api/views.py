@@ -175,6 +175,26 @@ class TestViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
+                # Check if user has uploaded CV for this test (if passed)
+                # If CV is uploaded, don't allow retaking the test
+                from users.models import CV
+                from tests.models import TestResult
+                passed_results = TestResult.objects.filter(
+                    user=user,
+                    test=test,
+                    is_completed=True,
+                    score__gte=test.passing_score
+                ).exists()
+                
+                if passed_results:
+                    # Check if CV is uploaded
+                    has_cv = CV.objects.filter(user=user).exists()
+                    if has_cv:
+                        return Response(
+                            {'error': 'CV already uploaded. Test cannot be retaken.'},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                
                 # Check for incomplete test (resume)
                 incomplete_result = TestResult.objects.filter(
                     user=user,
@@ -247,6 +267,81 @@ class TestViewSet(viewsets.ModelViewSet):
             {'error': 'telegram_id required'},
             status=status.HTTP_400_BAD_REQUEST
         )
+    
+    @action(detail=True, methods=['post'])
+    def notify_page_leave(self, request, pk=None):
+        """Notify about page leave attempt during test"""
+        test = self.get_object()
+        telegram_id = request.data.get('telegram_id')
+        attempts = request.data.get('attempts', 1)
+        test_id = request.data.get('test_id')
+        
+        if not telegram_id:
+            return Response(
+                {'error': 'telegram_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            user = User.objects.get(telegram_id=telegram_id)
+            
+            # Log page leave attempt
+            test_title = test.title if test else 'Unknown'
+            
+            # Send notification to admin (log as ERROR for visibility)
+            if attempts >= 2:
+                logger.error(
+                    f"🚨 CRITICAL: User attempted to leave test page {attempts} times - "
+                    f"User: {user.first_name} {user.last_name} (ID: {user.id}, Telegram ID: {telegram_id}), "
+                    f"Test: {test_title} (ID: {test_id or pk})"
+                )
+            else:
+                logger.warning(
+                    f"⚠️ Page leave attempt: User {user.first_name} {user.last_name} "
+                    f"(Telegram ID: {telegram_id}) attempted to leave test page {attempts} time(s) - "
+                    f"Test: {test_title} (ID: {test_id or pk})"
+                )
+            
+            # If 2+ attempts, block user immediately
+            if attempts >= 2:
+                user.is_blocked = True
+                user.blocked_reason = f"Test tark etildi (cheating) - {attempts} marta urinish"
+                user.blocked_at = timezone.now()
+                user.save()
+                
+                logger.error(
+                    f"🚨 User blocked due to page leave: user_id={user.id}, "
+                    f"telegram_id={telegram_id}, test_id={test_id or pk}, attempts={attempts}, "
+                    f"reason: {user.blocked_reason}"
+                )
+                
+                # Try to send notification to Telegram bot admin group
+                # This is done via logging - Telegram bot can monitor logs or we can add webhook
+                # For now, we'll log it and the bot's admin notification system will handle it
+                
+                return Response({
+                    'message': 'User blocked due to multiple page leave attempts',
+                    'blocked': True,
+                    'reason': user.blocked_reason
+                }, status=status.HTTP_200_OK)
+            
+            return Response({
+                'message': 'Page leave attempt logged',
+                'attempts': attempts,
+                'blocked': False
+            }, status=status.HTTP_200_OK)
+            
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'User not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            logger.error(f"Error notifying page leave: {e}", exc_info=True)
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     @action(detail=True, methods=['post'])
     def block_user(self, request, pk=None):

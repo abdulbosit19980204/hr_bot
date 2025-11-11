@@ -44,9 +44,11 @@ function ResultPage({ result, test, onContinue }) {
         </div>
       </div>
 
-      <button className="btn" onClick={onContinue}>
-        CV yuklash
-      </button>
+      {isPassed && (
+        <button className="btn" onClick={onContinue}>
+          CV yuklash
+        </button>
+      )}
     </div>
   )
 }

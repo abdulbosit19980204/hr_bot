@@ -67,7 +67,7 @@ function ResultsTable({ apiBaseUrl }) {
               <td>{result.user?.first_name} {result.user?.last_name}</td>
               <td>{result.user?.email || '-'}</td>
               <td>{result.user?.phone || '-'}</td>
-              <td>{result.user?.position || '-'}</td>
+              <td>{result.user?.position?.name || result.user?.position || '-'}</td>
               <td>{result.test?.title}</td>
               <td>{result.score}%</td>
               <td>{result.correct_answers} / {result.total_questions}</td>

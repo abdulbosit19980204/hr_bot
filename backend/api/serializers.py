@@ -171,6 +171,9 @@ class TestResultCreateSerializer(serializers.Serializer):
         return value
 
     def create(self, validated_data):
+        import logging
+        logger = logging.getLogger(__name__)
+        
         from django.utils import timezone
         request = self.context['request']
         test_id = validated_data['test_id']
@@ -181,20 +184,13 @@ class TestResultCreateSerializer(serializers.Serializer):
 
         # Get user (from request or telegram_id)
         if telegram_id:
-            # Check if this is bot's own telegram_id (prevent bot from taking tests)
-            import os
-            from django.conf import settings
-            bot_token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '')
-            if bot_token:
-                try:
-                    import requests
-                    bot_info = requests.get(f"https://api.telegram.org/bot{bot_token}/getMe", timeout=2)
-                    if bot_info.status_code == 200:
-                        bot_data = bot_info.json()
-                        if bot_data.get('ok') and bot_data.get('result', {}).get('id') == telegram_id:
-                            raise serializers.ValidationError("Bot o'zi test yubora olmaydi")
-                except Exception:
-                    pass  # Ignore errors in bot ID check
+            # Bot ID check - prevent bot from taking tests
+            # Known bot IDs (add more if needed)
+            known_bot_ids = [8357440403]  # Bot ID from error message
+            
+            if telegram_id in known_bot_ids:
+                logger.error(f"Bot tried to submit test with its own ID: {telegram_id}")
+                raise serializers.ValidationError(f"Bot cannot submit tests. Bot ID: {telegram_id}")
             
             try:
                 user = User.objects.get(telegram_id=telegram_id)
@@ -238,54 +234,94 @@ class TestResultCreateSerializer(serializers.Serializer):
                 started_at=timezone.now()
             )
 
-        # Get questions (random if configured or trial)
-        is_trial = validated_data.get('is_trial', False)
-        questions = list(test.questions.all().order_by('order', 'id'))
+        # Process answers - remove duplicates first
+        # Group answers by question_id and keep only the last one for each question
+        unique_answers = {}
+        logger.info(f"Processing {len(answers_data)} answers for test {test_id}, user {user.id} (telegram_id: {user.telegram_id})")
+        for idx, answer_data in enumerate(answers_data):
+            question_id = answer_data.get('question_id')
+            option_id = answer_data.get('option_id')
+            logger.info(f"Answer {idx + 1}: question_id={question_id}, option_id={option_id}")
+            if question_id and option_id:
+                unique_answers[question_id] = option_id
+            else:
+                logger.warning(f"Invalid answer data at index {idx}: {answer_data}")
         
-        if is_trial:
-            # Trial test - use trial_questions_count
-            trial_count = test.trial_questions_count
-            if len(questions) > trial_count:
-                import random
-                questions = random.sample(questions, trial_count)
-        elif test.random_questions_count > 0:
-            # Regular test - use random_questions_count
-            if len(questions) > test.random_questions_count:
-                import random
-                questions = random.sample(questions, test.random_questions_count)
+        logger.info(f"Unique answers after deduplication: {len(unique_answers)} answers")
+        
+        # Get questions based on the answers submitted (not random)
+        # This ensures we check the same questions that were shown to the user
+        is_trial = validated_data.get('is_trial', False)
+        
+        if unique_answers:
+            # Get questions from the answers submitted
+            # This ensures we check the exact questions that were shown to the user
+            answered_question_ids = list(unique_answers.keys())
+            questions = list(test.questions.filter(id__in=answered_question_ids).order_by('order', 'id'))
+            logger.info(f"Getting questions from answers: {len(questions)} questions from {len(answered_question_ids)} answered question IDs")
+        else:
+            # Fallback to random questions if no answers provided
+            questions = list(test.questions.all().order_by('order', 'id'))
+            if is_trial:
+                # Trial test - use trial_questions_count
+                trial_count = test.trial_questions_count
+                if len(questions) > trial_count:
+                    import random
+                    questions = random.sample(questions, trial_count)
+            elif test.random_questions_count > 0:
+                # Regular test - use random_questions_count
+                if len(questions) > test.random_questions_count:
+                    import random
+                    questions = random.sample(questions, test.random_questions_count)
+            logger.info(f"Using random questions: {len(questions)} questions (fallback)")
 
         # Update test result
         result.total_questions = len(questions)
         result.time_taken = time_taken
-
-        # Process answers - remove duplicates first
-        # Group answers by question_id and keep only the last one for each question
-        unique_answers = {}
-        for answer_data in answers_data:
-            question_id = answer_data.get('question_id')
-            option_id = answer_data.get('option_id')
-            if question_id and option_id:
-                unique_answers[question_id] = option_id
         
         # Process unique answers
         correct_answers = 0
         question_ids = {q.id for q in questions}
+        saved_answers = []
         
+        logger.info(f"Processing answers for {len(questions)} questions. Question IDs: {list(question_ids)}")
+        
+        # Create a mapping of question_id to question object for faster lookup
+        question_map = {q.id: q for q in questions}
+        
+        # Save all answers
         for question_id, option_id in unique_answers.items():
-            # Check if question is in test
-            if question_id not in question_ids:
-                continue
-
+            # Get question from map or fetch if not found
+            question = question_map.get(question_id)
+            
+            if not question:
+                # Question not in the initial set, try to get it
+                logger.warning(f"Question {question_id} not found in questions map. Test has questions: {list(question_map.keys())}")
+                try:
+                    question = Question.objects.get(id=question_id, test=test)
+                    # Add this question to the questions list and map
+                    questions.append(question)
+                    question_map[question_id] = question
+                    question_ids.add(question.id)
+                    result.total_questions = len(questions)
+                    logger.info(f"Added question {question_id} to questions list (was answered but not in initial set)")
+                except Question.DoesNotExist:
+                    logger.error(f"Question {question_id} does not exist in test {test_id}")
+                    continue
+            
+            # Get option for this question
             try:
-                question = Question.objects.get(id=question_id, test=test)
                 option = AnswerOption.objects.get(id=option_id, question=question)
                 
                 is_correct = option.is_correct
                 if is_correct:
                     correct_answers += 1
+                    logger.info(f"Correct answer: question_id={question_id}, option_id={option_id}")
+                else:
+                    logger.info(f"Incorrect answer: question_id={question_id}, option_id={option_id}")
 
                 # Update or create UserAnswer (to avoid duplicate)
-                UserAnswer.objects.update_or_create(
+                user_answer, created = UserAnswer.objects.update_or_create(
                     result=result,
                     question=question,
                     defaults={
@@ -293,8 +329,35 @@ class TestResultCreateSerializer(serializers.Serializer):
                         'is_correct': is_correct
                     }
                 )
-            except (Question.DoesNotExist, AnswerOption.DoesNotExist):
+                saved_answers.append({
+                    'question_id': question_id,
+                    'question_text': question.text,
+                    'option_id': option_id,
+                    'option_text': option.text,
+                    'is_correct': is_correct
+                })
+                logger.info(f"Saved answer: question_id={question_id}, option_id={option_id}, is_correct={is_correct}")
+            except Question.DoesNotExist as e:
+                logger.error(f"Question not found: question_id={question_id}, test_id={test_id}, error={e}")
                 continue
+            except AnswerOption.DoesNotExist as e:
+                logger.error(f"AnswerOption not found: question_id={question_id}, option_id={option_id}, error={e}")
+                continue
+            except Exception as e:
+                logger.error(f"Unexpected error saving answer: question_id={question_id}, option_id={option_id}, error={e}")
+                continue
+        
+        # Log saved answers for debugging
+        logger.info(f"Saved {len(saved_answers)} answers for test {test_id}, user {user.id} (telegram_id: {user.telegram_id}), result {result.id}")
+        logger.info(f"Correct answers: {correct_answers}, Total questions: {len(questions)}, User: {user.username} (ID: {user.id}, Telegram ID: {user.telegram_id})")
+        
+        # Ensure all questions have answers (even if not answered, save as None)
+        # This ensures complete record of all questions in the test
+        for question in questions:
+            if question.id not in unique_answers:
+                # Question was not answered - we can optionally save this too
+                # For now, we'll just log it
+                logger.info(f"Question {question.id} was not answered by user {user.id} (telegram_id: {user.telegram_id}) in test {test_id}")
 
         # Update score
         total_questions = len(questions)
@@ -305,6 +368,8 @@ class TestResultCreateSerializer(serializers.Serializer):
         result.completed_at = timezone.now()
         result.is_completed = True
         result.save()
+        
+        logger.info(f"Test result saved: User {user.username} (ID: {user.id}, Telegram ID: {user.telegram_id}), Score: {score}%, Correct: {correct_answers}/{total_questions}")
         
         # Mark trial test as taken
         is_trial = validated_data.get('is_trial', False)

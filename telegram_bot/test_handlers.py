@@ -30,8 +30,33 @@ async def start_telegram_test(callback: types.CallbackQuery, state: FSMContext, 
             f"{API_BASE_URL}/tests/{test_id}/questions/",
             params={'trial': 'true' if is_trial else 'false', 'telegram_id': callback.from_user.id}
         ) as resp:
+            logger.info(f"API response status: {resp.status}")
+            if resp.status == 403:
+                # User is blocked
+                try:
+                    error_data = await resp.json()
+                    blocked_reason = error_data.get('reason', 'Noma\'lum sabab')
+                except:
+                    error_text = await resp.text()
+                    blocked_reason = error_text if error_text else 'Noma\'lum sabab'
+                
+                logger.warning(f"User {callback.from_user.id} is blocked: {blocked_reason}")
+                
+                # Show user-friendly message
+                await callback.message.edit_text(
+                    f"⚠️ <b>Xatolik</b>\n\n"
+                    f"❌ Siz block qilingansiz!\n\n"
+                    f"📝 <b>Sabab:</b> {blocked_reason}\n\n"
+                    f"Sizda test ishlash imkoniyati mavjud emas.\n\n"
+                    f"Agar bu xato bo'lsa, iltimos admin bilan bog'laning.",
+                    parse_mode="HTML"
+                )
+                await callback.answer("⚠️ Siz block qilingansiz!", show_alert=True)
+                return
+            
             if resp.status == 200:
                 questions = await resp.json()
+                logger.info(f"Received {len(questions)} questions")
                 if not questions:
                     await callback.answer("❌ Testda savollar mavjud emas", show_alert=True)
                     return
@@ -55,16 +80,20 @@ async def start_telegram_test(callback: types.CallbackQuery, state: FSMContext, 
                     except Exception as e:
                         logger.error(f"Error notifying admin about test start: {e}", exc_info=True)
                 
-                # Save test data
+                # Save test data - IMPORTANT: Save telegram_id to state
                 await state.update_data(
                     test_id=test_id,
                     questions=questions,
                     current_question=0,
                     answers=[],
                     start_time=datetime.now().timestamp(),
+                    time_limit=test_data.get('time_limit', 60) * 60,  # Convert minutes to seconds
                     show_answers_immediately=test_data.get('show_answers_immediately', True),
-                    is_trial=is_trial
+                    is_trial=is_trial,
+                    telegram_id=callback.from_user.id,  # Save user's telegram_id to state
+                    test_data=test_data  # Save test_data for later use
                 )
+                logger.info(f"Test data saved to state, telegram_id: {callback.from_user.id}")
                 
                 # Save notify_error_callback to state
                 await state.update_data(notify_error_callback=notify_error_callback)
@@ -193,7 +222,18 @@ async def process_answer(callback: types.CallbackQuery, state: FSMContext):
         feedback_text += f"\n\n📊 To'g'ri javoblar: {correct_count}/{len(answers)}"
         
         if correct_option and not is_correct:
-            feedback_text += f"\n\nTo'g'ri javob: {correct_option.get('text', '')}"
+            correct_answer_text = correct_option.get('text', '')
+            # Truncate long answers to prevent "text is too long" error
+            # Telegram alert messages have a limit of 200 characters
+            max_answer_length = 100  # Leave room for other text
+            if len(correct_answer_text) > max_answer_length:
+                correct_answer_text = correct_answer_text[:max_answer_length] + "..."
+            feedback_text += f"\n\nTo'g'ri javob: {correct_answer_text}"
+        
+        # Ensure total feedback text doesn't exceed Telegram's 200 character limit for alerts
+        if len(feedback_text) > 200:
+            # Truncate to 200 characters
+            feedback_text = feedback_text[:197] + "..."
         
         await callback.answer(feedback_text, show_alert=True)
     
@@ -241,7 +281,17 @@ async def complete_test(message: types.Message, state: FSMContext, notify_callba
     test_data = data.get('test_data', {})
     answers = data.get('answers', [])
     start_time = data.get('start_time', datetime.now().timestamp())
-    telegram_id = message.from_user.id
+    
+    # Get telegram_id from state or message
+    # IMPORTANT: message.from_user.id might be bot's ID if message is from bot
+    # So we should get telegram_id from state where we saved it during test start
+    telegram_id = data.get('telegram_id')
+    if not telegram_id:
+        # Fallback to message.from_user.id if not in state
+        telegram_id = message.from_user.id
+        logger.warning(f"telegram_id not found in state, using message.from_user.id: {telegram_id}")
+    else:
+        logger.info(f"Using telegram_id from state: {telegram_id}")
     
     # Calculate time taken
     time_taken = int(datetime.now().timestamp() - start_time)
@@ -301,25 +351,89 @@ async def complete_test(message: types.Message, state: FSMContext, notify_callba
                     except Exception as e:
                         logger.error(f"Error notifying admin about test result: {e}", exc_info=True)
                 
-                # Show results
+                # Show results - limit message length to avoid "text is too long" error
+                # Telegram allows max 4096 characters per message
                 trial_prefix = "🧪 " if is_trial else ""
                 text = f"{trial_prefix}📊 <b>Test natijalari</b>\n\n"
                 text += f"📝 Jami: {total_questions} | ✅ To'g'ri: {correct_answers} | 📈 Ball: {score}%\n\n"
                 
+                # Get detailed answers from result (limit to avoid message too long)
+                result_answers = result.get('answers', [])
+                if result_answers and len(result_answers) > 0:
+                    # Show first 5 questions to save space
+                    max_questions_to_show = min(5, len(result_answers))
+                    text += "<b>Savollar va javoblar:</b>\n\n"
+                    for idx, answer_data in enumerate(result_answers[:max_questions_to_show], 1):
+                        question_data = answer_data.get('question', {})
+                        selected_option = answer_data.get('selected_option', {})
+                        is_correct = answer_data.get('is_correct', False)
+                        
+                        question_text = question_data.get('text', 'Savol')
+                        option_text = selected_option.get('text', 'Javob topilmadi')
+                        
+                        # Truncate long texts to save space
+                        if len(question_text) > 35:
+                            question_text = question_text[:35] + "..."
+                        if len(option_text) > 25:
+                            option_text = option_text[:25] + "..."
+                        
+                        status_icon = "✅" if is_correct else "❌"
+                        text += f"{idx}. {status_icon} {question_text}\n"
+                        text += f"   {option_text}\n\n"
+                        
+                        # Check if message is getting too long
+                        if len(text) > 3500:
+                            break
+                    
+                    if len(result_answers) > max_questions_to_show:
+                        remaining = len(result_answers) - max_questions_to_show
+                        text += f"... va yana {remaining} ta savol\n\n"
+                
+                # Get passing score from test_data
+                passing_score = test_data.get('passing_score', 60) if test_data else 60
+                
                 if is_passed:
                     text += "✅ <b>Tabriklaymiz! Testdan o'tdingiz!</b>"
                     if requires_cv and not is_trial:
-                        text += "\n\n📄 CV yuklash: /upload_cv"
+                        text += "\n\n📄 CV yuklash: /upload_cv yoki Menu'dan CV yuklash tugmasini bosing"
                 else:
-                    text += "❌ Testdan o'ta olmadingiz."
-                    if not is_trial:
-                        text += " Keyingi safar yanada yaxshi natija olishga harakat qiling!"
+                    # Check if score is low but not zero
+                    if score > 0 and score < passing_score:
+                        text += "❌ Testdan o'ta olmadingiz.\n\n"
+                        text += "💡 Iltimos, malakangizni oshirib bizni keyingi vakansiyalarimiz uchun ariza qoldirasiz deb umid qilamiz!"
+                    else:
+                        text += "❌ Testdan o'ta olmadingiz."
+                        if not is_trial:
+                            text += " Keyingi safar yanada yaxshi natija olishga harakat qiling!"
+                
+                # Ensure message is not too long (Telegram limit: 4096 chars)
+                if len(text) > 4096:
+                    text = text[:4000] + "\n\n... (xabar qisqartirildi)"
                 
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🔙 Asosiy menyu", callback_data="menu_back")]
                 ])
                 
-                await message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+                logger.info(f"Displaying test results (message length: {len(text)} chars)")
+                try:
+                    await message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+                except Exception as e:
+                    logger.error(f"Error displaying results: {e}", exc_info=True)
+                    # Try sending as new message if edit fails
+                    try:
+                        await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+                    except Exception as e2:
+                        logger.error(f"Error sending results as new message: {e2}", exc_info=True)
+                        # Send simplified message
+                        simple_text = (
+                            f"{trial_prefix}📊 <b>Test natijalari</b>\n\n"
+                            f"📝 Jami: {total_questions} | ✅ To'g'ri: {correct_answers} | 📈 Ball: {score}%\n\n"
+                        )
+                        if is_passed:
+                            simple_text += "✅ <b>Tabriklaymiz! Testdan o'tdingiz!</b>"
+                        else:
+                            simple_text += "❌ Testdan o'ta olmadingiz."
+                        await message.answer(simple_text, reply_markup=keyboard, parse_mode="HTML")
                 
                 # Request CV upload if passed (not for trial tests)
                 if is_passed and requires_cv and not is_trial:

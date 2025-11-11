@@ -12,6 +12,8 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
   const [startTime] = useState(Date.now())
   const [showLeaveModal, setShowLeaveModal] = useState(false)
   const [attemptedLeave, setAttemptedLeave] = useState(false)
+  const [leaveAttempts, setLeaveAttempts] = useState(0)
+  const [isBlocked, setIsBlocked] = useState(false)
   const testContainerRef = useRef(null)
 
   useEffect(() => {
@@ -135,38 +137,101 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
     }
   }
 
-  const handleBeforeUnload = (e) => {
-    if (!submitting && !attemptedLeave) {
+  const handleBeforeUnload = async (e) => {
+    if (!submitting && !isBlocked) {
       e.preventDefault()
       e.returnValue = 'Siz testni tark etmoqchisiz. Agar testni tark etsangiz, siz block qilinasiz va vakansiyangiz ko\'rib chiqishdan to\'xtatiladi. Davom etasizmi?'
+      
+      const newAttempts = leaveAttempts + 1
+      setLeaveAttempts(newAttempts)
+      
+      // Notify backend about page leave attempt
+      await notifyPageLeaveAttempt(newAttempts)
+      
+      // If 2+ attempts, block user and stop test
+      if (newAttempts >= 2) {
+        setIsBlocked(true)
+        await blockUserAndStopTest('Test tark etildi (cheating) - 2+ marta urinish')
+        return e.returnValue
+      }
+      
       setShowLeaveModal(true)
       setAttemptedLeave(true)
       return e.returnValue
     }
   }
 
-  const handleBlur = () => {
-    if (!submitting && !attemptedLeave) {
+  const handleBlur = async () => {
+    if (!submitting && !isBlocked && !attemptedLeave) {
+      const newAttempts = leaveAttempts + 1
+      setLeaveAttempts(newAttempts)
+      
+      // Notify backend about page leave attempt
+      await notifyPageLeaveAttempt(newAttempts)
+      
+      // If 2+ attempts, block user and stop test
+      if (newAttempts >= 2) {
+        setIsBlocked(true)
+        await blockUserAndStopTest('Test tark etildi (cheating) - 2+ marta urinish')
+        return
+      }
+      
       setShowLeaveModal(true)
       setAttemptedLeave(true)
     }
   }
 
   const handleFocus = () => {
-    if (attemptedLeave && !submitting) {
+    if (attemptedLeave && !submitting && !isBlocked) {
       setShowLeaveModal(true)
+    }
+  }
+  
+  const notifyPageLeaveAttempt = async (attempts) => {
+    try {
+      await axios.post(`${apiBaseUrl}/tests/${test.id}/notify_page_leave/`, {
+        telegram_id: user.telegram_id,
+        attempts: attempts,
+        test_id: test.id
+      })
+    } catch (error) {
+      console.error('Error notifying page leave attempt:', error)
+    }
+  }
+  
+  const blockUserAndStopTest = async (reason) => {
+    try {
+      // Block user
+      await blockUser(reason)
+      
+      // Stop test - submit with empty answers
+      setSubmitting(true)
+      cleanupCheatingProtection()
+      
+      // Notify user
+      alert('⚠️ Siz testni tark etganingiz uchun block qilindingiz va test to\'xtatildi!')
+      
+      // Close WebApp
+      if (window.Telegram && window.Telegram.WebApp) {
+        window.Telegram.WebApp.close()
+      } else {
+        window.close()
+      }
+    } catch (error) {
+      console.error('Error blocking user and stopping test:', error)
     }
   }
 
   const handleConfirmLeave = async () => {
     setShowLeaveModal(false)
-    await blockUser('Test tark etildi (cheating)')
-    // Close window or redirect
-    if (window.Telegram && window.Telegram.WebApp) {
-      window.Telegram.WebApp.close()
-    } else {
-      window.close()
-    }
+    setIsBlocked(true)
+    const newAttempts = leaveAttempts + 1
+    
+    // Notify backend about page leave attempt
+    await notifyPageLeaveAttempt(newAttempts)
+    
+    // Block user and stop test
+    await blockUserAndStopTest('Test tark etildi (cheating) - foydalanuvchi tasdiqladi')
   }
 
   const handleCancelLeave = () => {
@@ -288,13 +353,19 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
   return (
     <div ref={testContainerRef} className="test-container" style={{ userSelect: 'none' }}>
       {/* Leave Warning Modal */}
-      {showLeaveModal && (
+      {showLeaveModal && !isBlocked && (
         <div className="modal-overlay">
           <div className="modal-content">
             <h3>⚠️ Ogohlantirish</h3>
             <p>
               Siz testni tark etmoqchisiz. Agar testni tark etsangiz, siz block qilinasiz va vakansiyangiz ko'rib chiqishdan to'xtatiladi.
             </p>
+            {leaveAttempts > 0 && (
+              <p style={{ color: leaveAttempts >= 2 ? '#dc3545' : '#ff9800', fontWeight: 'bold', marginTop: '10px' }}>
+                ⚠️ Urinishlar soni: {leaveAttempts} / 2
+                {leaveAttempts >= 2 && ' - Keyingi urinishda siz avtomatik block qilinasiz!'}
+              </p>
+            )}
             <p><strong>Haqiqatdan ham testni tark etmoqchimisiz?</strong></p>
             <div className="modal-buttons">
               <button className="btn btn-danger" onClick={handleConfirmLeave}>
@@ -302,6 +373,30 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
               </button>
               <button className="btn btn-secondary" onClick={handleCancelLeave}>
                 Bekor qilish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Blocked Modal */}
+      {isBlocked && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="modal-content">
+            <h3>❌ Test to'xtatildi</h3>
+            <p>
+              Siz testni tark etganingiz uchun block qilindingiz va test to'xtatildi.
+            </p>
+            <p><strong>Sabab: Test tark etildi (cheating)</strong></p>
+            <div className="modal-buttons">
+              <button className="btn btn-primary" onClick={() => {
+                if (window.Telegram && window.Telegram.WebApp) {
+                  window.Telegram.WebApp.close()
+                } else {
+                  window.close()
+                }
+              }}>
+                Yopish
               </button>
             </div>
           </div>

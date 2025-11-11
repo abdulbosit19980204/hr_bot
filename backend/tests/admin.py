@@ -269,10 +269,15 @@ class TestResultAdmin(admin.ModelAdmin):
     list_display = ['user', 'test', 'attempt_number', 'score', 'correct_answers', 'total_questions', 'is_passed_display', 'is_completed', 'started_at', 'completed_at']
     list_filter = ['test', 'is_completed', 'attempt_number', 'completed_at', 'user__position']
     search_fields = ['user__username', 'user__first_name', 'user__last_name', 'test__title']
-    readonly_fields = ['started_at', 'completed_at', 'time_taken', 'attempt_number']
+    readonly_fields = ['started_at', 'completed_at', 'time_taken']
     inlines = [UserAnswerInline]
     date_hierarchy = 'completed_at'
-    actions = ['export_to_excel', 'export_to_csv']
+    actions = ['export_to_excel', 'export_to_csv', 'reset_attempts']
+    fieldsets = (
+        ('Basic Info', {'fields': ('user', 'test', 'attempt_number')}),
+        ('Results', {'fields': ('score', 'correct_answers', 'total_questions', 'is_completed')}),
+        ('Timing', {'fields': ('started_at', 'completed_at', 'time_taken')}),
+    )
 
     def is_passed_display(self, obj):
         if obj.is_passed:
@@ -346,6 +351,35 @@ class TestResultAdmin(admin.ModelAdmin):
         
         return response
     export_to_csv.short_description = "Tanlangan natijalarni CSV'ga eksport qilish"
+    
+    def reset_attempts(self, request, queryset):
+        """Reset attempts for selected test results - allows user to retake test"""
+        from django.db.models import Count
+        from django.utils import timezone
+        
+        reset_count = 0
+        for result in queryset:
+            # Delete this test result to allow retaking
+            user = result.user
+            test = result.test
+            
+            # Count remaining attempts
+            remaining_results = TestResult.objects.filter(
+                user=user,
+                test=test,
+                is_completed=True
+            ).exclude(id=result.id).count()
+            
+            # Delete the result
+            result.delete()
+            reset_count += 1
+        
+        self.message_user(
+            request,
+            f"{reset_count} ta test natijasi o'chirildi. Foydalanuvchilar testni qayta yechishlari mumkin.",
+            level='success'
+        )
+    reset_attempts.short_description = "Tanlangan natijalarni o'chirish va urinishlarni qayta ochish"
 
 
 @admin.register(UserAnswer)

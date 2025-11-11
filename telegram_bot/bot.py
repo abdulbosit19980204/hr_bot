@@ -14,18 +14,28 @@ from dotenv import load_dotenv
 import aiohttp
 
 # Configure logging first
-logging.basicConfig(level=logging.INFO)
+try:
+    from logging_config import setup_logging
+    setup_logging()
+except ImportError:
+    # Fallback to basic logging if logging_config not found
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(levelname)s %(asctime)s %(name)s %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
 logger = logging.getLogger(__name__)
 
 try:
     from test_handlers import (
-        start_telegram_test, process_answer, request_cv_upload
+        start_telegram_test, process_answer, request_cv_upload, show_question
     )
-except ImportError:
-    logger.warning("test_handlers module not found, Telegram test functionality disabled")
+except ImportError as e:
+    logger.warning(f"test_handlers module not found: {e}, Telegram test functionality disabled")
     start_telegram_test = None
     process_answer = None
     request_cv_upload = None
+    show_question = None
 
 # Load environment variables
 load_dotenv()
@@ -69,10 +79,42 @@ async def send_to_admin(message_text: str, parse_mode: str = "HTML"):
     
     try:
         chat_id = int(ADMIN_CHAT_ID) if ADMIN_CHAT_ID.lstrip('-').isdigit() else ADMIN_CHAT_ID
+        
+        # Clean message text - remove HTML tags if parse_mode is HTML but text contains invalid HTML
+        # Sometimes error messages contain HTML from Django error pages
+        if parse_mode == "HTML":
+            # Remove HTML doctype and other invalid tags
+            import re
+            # Remove HTML doctype and html/head/body tags
+            message_text = re.sub(r'<!DOCTYPE[^>]*>', '', message_text, flags=re.IGNORECASE)
+            message_text = re.sub(r'<html[^>]*>', '', message_text, flags=re.IGNORECASE)
+            message_text = re.sub(r'</html>', '', message_text, flags=re.IGNORECASE)
+            message_text = re.sub(r'<head[^>]*>.*?</head>', '', message_text, flags=re.IGNORECASE | re.DOTALL)
+            message_text = re.sub(r'<body[^>]*>', '', message_text, flags=re.IGNORECASE)
+            message_text = re.sub(r'</body>', '', message_text, flags=re.IGNORECASE)
+            # Remove script and style tags
+            message_text = re.sub(r'<script[^>]*>.*?</script>', '', message_text, flags=re.IGNORECASE | re.DOTALL)
+            message_text = re.sub(r'<style[^>]*>.*?</style>', '', message_text, flags=re.IGNORECASE | re.DOTALL)
+            # Clean up extra whitespace
+            message_text = re.sub(r'\s+', ' ', message_text).strip()
+            # Limit message length (Telegram allows max 4096 chars)
+            if len(message_text) > 4000:
+                message_text = message_text[:4000] + "... (xabar qisqartirildi)"
+        
         await bot.send_message(chat_id=chat_id, text=message_text, parse_mode=parse_mode)
         logger.info(f"Message sent to admin chat: {chat_id}")
     except Exception as e:
         logger.error(f"Error sending message to admin: {e}", exc_info=True)
+        # Try sending without parse_mode if HTML parsing fails
+        try:
+            # Remove HTML tags completely and send as plain text
+            import re
+            plain_text = re.sub(r'<[^>]+>', '', message_text)
+            plain_text = plain_text[:4000] if len(plain_text) > 4000 else plain_text
+            await bot.send_message(chat_id=chat_id, text=plain_text, parse_mode=None)
+            logger.info(f"Message sent to admin chat as plain text: {chat_id}")
+        except Exception as e2:
+            logger.error(f"Error sending plain text message to admin: {e2}", exc_info=True)
 
 
 async def notify_new_candidate(user_data: dict, position_name: str = None):
@@ -151,9 +193,15 @@ async def notify_test_result(user_data: dict, test_title: str, result_data: dict
 
 async def notify_error(error_type: str, error_message: str, user_id: int = None, context: dict = None):
     """Notify admin about errors"""
+    import re
+    # Strip HTML tags from error message
+    error_message_clean = re.sub(r'<[^>]+>', '', error_message)
+    # Remove extra whitespace
+    error_message_clean = re.sub(r'\s+', ' ', error_message_clean).strip()
+    
     # Limit error message length (Telegram max 4096 chars)
     max_message_length = 3500
-    error_msg_short = error_message[:500] if len(error_message) > 500 else error_message
+    error_msg_short = error_message_clean[:500] if len(error_message_clean) > 500 else error_message_clean
     
     message = (
         "⚠️ <b>Xatolik</b>\n"
@@ -601,6 +649,7 @@ async def show_main_menu(message: types.Message, user_data: dict = None):
         [InlineKeyboardButton(text="👤 Profilni tahrirlash", callback_data="menu_edit_profile")],
         [InlineKeyboardButton(text="📊 Natijalarim", callback_data="menu_results")],
         [InlineKeyboardButton(text="ℹ️ Profil ma'lumotlari", callback_data="menu_profile_info")],
+        [InlineKeyboardButton(text="📄 CV yuklash", callback_data="menu_upload_cv")],
     ])
     
     # User info text
@@ -682,12 +731,10 @@ async def process_test_selection(callback: types.CallbackQuery, state: FSMContex
                                 )]
                             ])
                         else:
-                            # HTTP - use regular URL button (still a button, not a link)
+                            # HTTP - Telegram HTTP URL'larni button sifatida qabul qilmaydi
+                            # Shuning uchun oddiy HTML link ko'rsatamiz
                             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                                [InlineKeyboardButton(
-                                    text="🚀 Testni boshlash",
-                                    url=webapp_url
-                                )]
+                                [InlineKeyboardButton(text="🔙 Orqaga", callback_data="menu_back")]
                             ])
                         
                         passing_score = test.get('passing_score', 60)
@@ -705,8 +752,11 @@ async def process_test_selection(callback: types.CallbackQuery, state: FSMContex
                         
                         if not use_webapp:
                             message_text += "⚠️ <b>Development rejimida</b>\n\n"
-                        
-                        message_text += "Testni boshlash uchun quyidagi tugmani bosing:"
+                            message_text += f"Testni boshlash uchun quyidagi linkni brauzerda oching:\n\n"
+                            message_text += f"<code>{webapp_url}</code>\n\n"
+                            message_text += f"Yoki linkni bosib oching:\n<a href=\"{webapp_url}\">🚀 Testni boshlash</a>"
+                        else:
+                            message_text += "Testni boshlash uchun quyidagi tugmani bosing:"
                         
                         await callback.message.edit_text(
                             message_text,
@@ -816,11 +866,14 @@ async def process_test_webapp(callback: types.CallbackQuery):
                         message_text += "Testni boshlash uchun quyidagi tugmani bosing:"
                     else:
                         # HTTP - Telegram HTTP URL'larni qabul qilmaydi, shuning uchun oddiy matn link ko'rsatamiz
+                        # Linkni ko'rsatish va URL ni nusxalash uchun button qo'shamiz
                         keyboard = InlineKeyboardMarkup(inline_keyboard=[
                             [InlineKeyboardButton(text="🔙 Orqaga", callback_data="menu_back")]
                         ])
                         message_text += "⚠️ <b>Development rejimida</b>\n\n"
-                        message_text += f"Testni boshlash uchun quyidagi linkni brauzerda oching:\n<a href=\"{webapp_url}\">🚀 Testni boshlash</a>"
+                        message_text += f"Testni boshlash uchun quyidagi linkni brauzerda oching:\n\n"
+                        message_text += f"<code>{webapp_url}</code>\n\n"
+                        message_text += f"Yoki linkni bosib oching:\n<a href=\"{webapp_url}\">🚀 Testni boshlash</a>"
                     
                     await callback.message.edit_text(
                         message_text,
@@ -910,13 +963,26 @@ async def process_test_telegram(callback: types.CallbackQuery, state: FSMContext
 @dp.callback_query(lambda c: c.data.startswith("start_telegram_test_"))
 async def handle_start_telegram_test(callback: types.CallbackQuery, state: FSMContext):
     """Handle start telegram test"""
-    if start_telegram_test:
-        # Save notify_callback to state
-        await state.update_data(notify_callback=notify_test_result, notify_error_callback=notify_error, is_trial=False)
-        await start_telegram_test(callback, state, notify_callback=notify_test_result, notify_start_callback=notify_test_start, notify_error_callback=notify_error)
-    else:
-        await callback.answer("❌ Telegram test funksiyasi mavjud emas", show_alert=True)
-    await callback.answer()
+    try:
+        logger.info(f"handle_start_telegram_test called for user {callback.from_user.id}")
+        if start_telegram_test:
+            # Save notify_callback to state
+            await state.update_data(notify_callback=notify_test_result, notify_error_callback=notify_error, is_trial=False)
+            logger.info("Calling start_telegram_test")
+            await start_telegram_test(callback, state, notify_callback=notify_test_result, notify_start_callback=notify_test_start, notify_error_callback=notify_error)
+        else:
+            logger.error("start_telegram_test function not found")
+            await callback.answer("❌ Telegram test funksiyasi mavjud emas", show_alert=True)
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Error in handle_start_telegram_test: {e}", exc_info=True)
+        await notify_error(
+            "Telegram testni boshlash xatoligi",
+            str(e),
+            user_id=callback.from_user.id,
+            context={'function': 'handle_start_telegram_test', 'callback_data': callback.data}
+        )
+        await callback.answer("❌ Xatolik yuz berdi", show_alert=True)
 
 
 @dp.callback_query(lambda c: c.data.startswith("start_trial_test_"))
@@ -934,11 +1000,29 @@ async def handle_start_trial_test(callback: types.CallbackQuery, state: FSMConte
 @dp.callback_query(lambda c: c.data.startswith("answer_"))
 async def handle_answer(callback: types.CallbackQuery, state: FSMContext):
     """Handle answer to question"""
-    if process_answer:
-        await process_answer(callback, state)
-    else:
-        await callback.answer("❌ Javobni qayta ishlash funksiyasi mavjud emas", show_alert=True)
-    await callback.answer()
+    try:
+        logger.info(f"handle_answer called for user {callback.from_user.id}, callback_data: {callback.data}")
+        if process_answer:
+            await process_answer(callback, state)
+        else:
+            logger.error("process_answer function not found")
+            await callback.answer("❌ Javobni qayta ishlash funksiyasi mavjud emas", show_alert=True)
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Error in handle_answer: {e}", exc_info=True)
+        data = await state.get_data()
+        notify_error_callback = data.get('notify_error_callback', notify_error)
+        if notify_error_callback:
+            try:
+                await notify_error_callback(
+                    "Javobni qayta ishlash xatoligi",
+                    str(e),
+                    user_id=callback.from_user.id,
+                    context={'function': 'handle_answer', 'callback_data': callback.data}
+                )
+            except Exception as notify_err:
+                logger.error(f"Error notifying admin: {notify_err}", exc_info=True)
+        await callback.answer("❌ Xatolik yuz berdi", show_alert=True)
 
 
 @dp.callback_query(lambda c: c.data == "cancel_test")
@@ -1368,22 +1452,193 @@ async def menu_back(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@dp.callback_query(lambda c: c.data == "menu_upload_cv")
+async def menu_upload_cv(callback: types.CallbackQuery):
+    """Handle CV upload from menu"""
+    telegram_id = callback.from_user.id
+    
+    # Check if user has passed any test
+    async with aiohttp.ClientSession() as session:
+        # Get user's test results
+        async with session.get(
+            f"{API_BASE_URL}/results/",
+            params={'user__telegram_id': telegram_id, 'is_completed': 'true'}
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                results = []
+                if isinstance(data, dict):
+                    results = data.get('results', [])
+                elif isinstance(data, list):
+                    results = data
+                
+                # Check if user has passed any test
+                has_passed = False
+                for result in results:
+                    if isinstance(result, dict):
+                        is_passed = result.get('is_passed', False)
+                        if is_passed:
+                            has_passed = True
+                            break
+                
+                if not has_passed:
+                    await callback.answer(
+                        "⚠️ Siz avval testdan o'tishingiz kerak!\n\n"
+                        "CV yuklash uchun kamida bitta testdan muvaffaqiyatli o'tishingiz kerak.",
+                        show_alert=True
+                    )
+                    return
+                
+                # User has passed, request CV upload
+                await callback.message.edit_text(
+                    "📄 <b>CV yuklash</b>\n\n"
+                    "CV faylingizni yuboring (PDF, DOC, DOCX formatida).\n\n"
+                    "Yoki /upload_cv buyrug'ini yuboring.",
+                    parse_mode="HTML"
+                )
+            else:
+                await callback.answer("❌ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.", show_alert=True)
+    
+    await callback.answer()
+
+
+@dp.message(Command("upload_cv"))
+async def cmd_upload_cv(message: types.Message):
+    """Handle CV upload command"""
+    telegram_id = message.from_user.id
+    
+    # Check if user has passed any test
+    async with aiohttp.ClientSession() as session:
+        # Get user's test results
+        async with session.get(
+            f"{API_BASE_URL}/results/",
+            params={'user__telegram_id': telegram_id, 'is_completed': 'true'}
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                results = []
+                if isinstance(data, dict):
+                    results = data.get('results', [])
+                elif isinstance(data, list):
+                    results = data
+                
+                # Check if user has passed any test
+                has_passed = False
+                for result in results:
+                    if isinstance(result, dict):
+                        is_passed = result.get('is_passed', False)
+                        if is_passed:
+                            has_passed = True
+                            break
+                
+                if not has_passed:
+                    await message.answer(
+                        "⚠️ <b>Siz avval testdan o'tishingiz kerak!</b>\n\n"
+                        "CV yuklash uchun kamida bitta testdan muvaffaqiyatli o'tishingiz kerak.\n\n"
+                        "Test topshirish uchun /apply buyrug'ini yuboring.",
+                        parse_mode="HTML"
+                    )
+                    return
+                
+                # User has passed, request CV upload
+                await message.answer(
+                    "📄 <b>CV yuklash</b>\n\n"
+                    "CV faylingizni yuboring (PDF, DOC, DOCX formatida).",
+                    parse_mode="HTML"
+                )
+            else:
+                await message.answer("❌ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.")
+
+
+@dp.message(Command("info"))
+async def cmd_info(message: types.Message):
+    """Handle info command - show profile information"""
+    try:
+        telegram_id = message.from_user.id
+        
+        # Get user data from API
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{API_BASE_URL}/users/telegram_auth/",
+                json={
+                    'telegram_id': telegram_id,
+                    'first_name': message.from_user.first_name or '',
+                    'last_name': message.from_user.last_name or ''
+                }
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    user_data = data.get('user', {})
+                    
+                    if user_data:
+                        # Show profile information
+                        text = "ℹ️ <b>Profil ma'lumotlari</b>\n\n"
+                        text += f"👤 <b>Ism:</b> {user_data.get('first_name', '')} {user_data.get('last_name', '')}\n"
+                        text += f"🆔 <b>Telegram ID:</b> {user_data.get('telegram_id', 'N/A')}\n"
+                        text += f"📧 <b>Email:</b> {user_data.get('email', 'Belgilanmagan')}\n"
+                        text += f"📱 <b>Telefon:</b> {user_data.get('phone', 'Belgilanmagan')}\n"
+                        
+                        position = user_data.get('position')
+                        if position:
+                            if isinstance(position, dict):
+                                position_name = position.get('name', 'Belgilanmagan')
+                            else:
+                                position_name = str(position)
+                            text += f"💼 <b>Lavozim:</b> {position_name}\n"
+                        else:
+                            text += f"💼 <b>Lavozim:</b> Belgilanmagan\n"
+                        
+                        if user_data.get('is_blocked'):
+                            text += f"\n⚠️ <b>Holat:</b> Block qilingan\n"
+                            text += f"📝 <b>Sabab:</b> {user_data.get('blocked_reason', 'Noma\'lum')}\n"
+                        else:
+                            text += f"\n✅ <b>Holat:</b> Faol\n"
+                        
+                        await message.answer(text, parse_mode="HTML")
+                    else:
+                        await message.answer("❌ Foydalanuvchi ma'lumotlari topilmadi.")
+                else:
+                    await message.answer("❌ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.")
+    except Exception as e:
+        logger.error(f"Error in cmd_info: {e}", exc_info=True)
+        await notify_error("Profil ma'lumotlarini ko'rsatish xatoligi", str(e), user_id=message.from_user.id, context={'function': 'cmd_info'})
+        await message.answer("❌ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.")
+
+
 @dp.callback_query(lambda c: c.data.startswith("back_question_"))
 async def handle_back_question(callback: types.CallbackQuery, state: FSMContext):
     """Handle back to previous question"""
-    if process_answer:
+    try:
+        logger.info(f"handle_back_question called for user {callback.from_user.id}, callback_data: {callback.data}")
         # Get question index from callback data
         question_index = int(callback.data.split("_")[2])
+        logger.info(f"Going back to question {question_index}")
         data = await state.get_data()
         notify_callback = data.get('notify_callback')
         notify_error_callback = data.get('notify_error_callback')
         
         # Show previous question
-        from test_handlers import show_question
-        await show_question(callback.message, state, question_index, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
-    else:
-        await callback.answer("❌ Funksiya mavjud emas", show_alert=True)
-    await callback.answer()
+        if show_question:
+            await show_question(callback.message, state, question_index, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
+        else:
+            logger.error("show_question function not found")
+            await callback.answer("❌ Funksiya mavjud emas", show_alert=True)
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Error in handle_back_question: {e}", exc_info=True)
+        data = await state.get_data()
+        notify_error_callback = data.get('notify_error_callback', notify_error)
+        if notify_error_callback:
+            try:
+                await notify_error_callback(
+                    "Oldingi savolga qaytish xatoligi",
+                    str(e),
+                    user_id=callback.from_user.id,
+                    context={'function': 'handle_back_question', 'callback_data': callback.data}
+                )
+            except Exception as notify_err:
+                logger.error(f"Error notifying admin: {notify_err}", exc_info=True)
+        await callback.answer("❌ Xatolik yuz berdi", show_alert=True)
 
 
 # Profile edit callbacks
@@ -1573,11 +1828,12 @@ async def setup_bot_commands():
     commands = [
         types.BotCommand(command="start", description="Botni boshlash"),
         types.BotCommand(command="menu", description="Asosiy menu"),
-        types.BotCommand(command="apply", description="Test topshirish"),
-        types.BotCommand(command="trial", description="Trial test"),
-        types.BotCommand(command="profile", description="Profilni tahrirlash"),
-        types.BotCommand(command="results", description="Natijalarim"),
-        types.BotCommand(command="upload_cv", description="CV yuklash"),
+        types.BotCommand(command="apply", description="📝 Test topshirish"),
+        types.BotCommand(command="trial", description="🧪 Trial test"),
+        types.BotCommand(command="profile", description="👤 Profilni tahrirlash"),
+        types.BotCommand(command="results", description="📊 Natijalarim"),
+        types.BotCommand(command="upload_cv", description="📄 CV yuklash"),
+        types.BotCommand(command="info", description="ℹ️ Profil ma'lumotlari"),
     ]
     await bot.set_my_commands(commands)
     logger.info("Bot commands menu set")
