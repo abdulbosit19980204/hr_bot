@@ -17,7 +17,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from users.models import CV, Position
+from users.models import CV, Position, TelegramProfile
 from tests.models import Test, Question, AnswerOption, TestResult
 from .serializers import (
     TestSerializer, TestListSerializer, QuestionSerializer,
@@ -399,13 +399,49 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def telegram_auth(self, request):
-        """Authenticate user by Telegram ID"""
+        """Authenticate user by Telegram ID and update Telegram info"""
         telegram_id = request.data.get('telegram_id')
         if not telegram_id:
             return Response({'error': 'telegram_id is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             user = User.objects.get(telegram_id=telegram_id)
+            # Update TelegramProfile, not User's first_name/last_name
+            try:
+                telegram_profile = TelegramProfile.objects.get(telegram_id=telegram_id)
+                # Update existing profile
+                telegram_profile.user = user
+            except TelegramProfile.DoesNotExist:
+                # Create new profile
+                telegram_profile = TelegramProfile.objects.create(
+                    user=user,
+                    telegram_id=telegram_id,
+                    telegram_is_premium=False,
+                    telegram_is_bot=False
+                )
+            
+            # Update TelegramProfile info if provided
+            if 'telegram_username' in request.data:
+                telegram_profile.telegram_username = request.data.get('telegram_username')
+            if 'telegram_language_code' in request.data:
+                telegram_profile.telegram_language_code = request.data.get('telegram_language_code')
+            if 'telegram_is_premium' in request.data:
+                telegram_profile.telegram_is_premium = request.data.get('telegram_is_premium', False)
+            # Update telegram first_name and last_name (NOT User's first_name/last_name)
+            if 'first_name' in request.data:
+                telegram_first_name = request.data.get('first_name', '')
+                telegram_profile.telegram_first_name = telegram_first_name if telegram_first_name is not None else ''
+            if 'last_name' in request.data:
+                telegram_last_name = request.data.get('last_name', '')
+                telegram_profile.telegram_last_name = telegram_last_name if telegram_last_name is not None else ''
+            
+            # Update user's telegram_id if not set
+            if not user.telegram_id:
+                user.telegram_id = telegram_id
+                user.save()
+            
+            telegram_profile.save()
+            
             refresh = RefreshToken.for_user(user)
             return Response({
                 'refresh': str(refresh),
@@ -413,13 +449,34 @@ class UserViewSet(viewsets.ModelViewSet):
                 'user': UserSerializer(user).data
             })
         except User.DoesNotExist:
-            # Create user if not exists
+            # Create user if not exists (without telegram first_name/last_name)
             user = User.objects.create_user(
                 username=f'user_{telegram_id}',
                 telegram_id=telegram_id,
-                first_name=request.data.get('first_name', ''),
-                last_name=request.data.get('last_name', '')
+                # Don't set first_name/last_name from telegram - user will fill it during registration
+                first_name='',
+                last_name=''
             )
+            
+            # Create TelegramProfile with telegram info
+            telegram_first_name = request.data.get('first_name', '') or ''
+            telegram_last_name = request.data.get('last_name', '') or ''
+            if telegram_first_name is None:
+                telegram_first_name = ''
+            if telegram_last_name is None:
+                telegram_last_name = ''
+            
+            telegram_profile = TelegramProfile.objects.create(
+                user=user,
+                telegram_id=telegram_id,
+                telegram_first_name=telegram_first_name,
+                telegram_last_name=telegram_last_name,
+                telegram_username=request.data.get('telegram_username'),
+                telegram_language_code=request.data.get('telegram_language_code'),
+                telegram_is_premium=request.data.get('telegram_is_premium', False),
+                telegram_is_bot=False
+            )
+            
             refresh = RefreshToken.for_user(user)
             return Response({
                 'refresh': str(refresh),
@@ -438,14 +495,24 @@ class UserViewSet(viewsets.ModelViewSet):
                 for key in ['first_name', 'last_name', 'email', 'phone']:
                     if key in request.data:
                         value = request.data[key]
+                        # None ni bo'sh stringga o'zgartirish (Django NOT NULL constraint uchun)
+                        if value is None:
+                            value = ''
                         # first_name bo'sh bo'lmasligi kerak
                         if key == 'first_name' and not value:
                             value = user.first_name or 'User'
+                        # last_name None bo'lmasligi kerak (bo'sh string bo'lishi mumkin)
+                        if key == 'last_name' and value is None:
+                            value = ''
                         setattr(user, key, value)
                 
                 # first_name bo'sh bo'lsa, default qo'yish
                 if not user.first_name:
                     user.first_name = request.data.get('first_name', 'User') or 'User'
+                
+                # last_name None bo'lmasligi kerak (bo'sh string bo'lishi mumkin)
+                if user.last_name is None:
+                    user.last_name = ''
                 
                 # Handle position (can be position_id)
                 if 'position_id' in request.data:
@@ -458,6 +525,35 @@ class UserViewSet(viewsets.ModelViewSet):
                             pass
                 
                 user.save()
+                
+                # Update or create TelegramProfile
+                try:
+                    telegram_profile = TelegramProfile.objects.get(telegram_id=telegram_id)
+                    # Update existing profile
+                    telegram_profile.user = user
+                except TelegramProfile.DoesNotExist:
+                    # Create new profile
+                    telegram_profile = TelegramProfile.objects.create(
+                        user=user,
+                        telegram_id=telegram_id,
+                        telegram_is_premium=False,
+                        telegram_is_bot=False
+                    )
+                
+                # Update TelegramProfile with telegram data if provided
+                if 'telegram_first_name' in request.data:
+                    telegram_profile.telegram_first_name = request.data.get('telegram_first_name', '')
+                if 'telegram_last_name' in request.data:
+                    telegram_profile.telegram_last_name = request.data.get('telegram_last_name', '')
+                if 'telegram_username' in request.data:
+                    telegram_profile.telegram_username = request.data.get('telegram_username')
+                if 'telegram_language_code' in request.data:
+                    telegram_profile.telegram_language_code = request.data.get('telegram_language_code')
+                if 'telegram_is_premium' in request.data:
+                    telegram_profile.telegram_is_premium = request.data.get('telegram_is_premium', False)
+                
+                telegram_profile.save()
+                
                 refresh = RefreshToken.for_user(user)
                 return Response({
                     'refresh': str(refresh),
@@ -471,13 +567,21 @@ class UserViewSet(viewsets.ModelViewSet):
         username = request.data.get('username') or f'user_{telegram_id}'
         password = User.objects.make_random_password()
         
+        # Ensure first_name and last_name are not None (use empty string instead)
+        first_name = request.data.get('first_name', '') or ''
+        last_name = request.data.get('last_name', '') or ''
+        if first_name is None:
+            first_name = ''
+        if last_name is None:
+            last_name = ''
+        
         user_data = {
             'username': username,
             'telegram_id': telegram_id,
-            'first_name': request.data.get('first_name', ''),
-            'last_name': request.data.get('last_name', ''),
-            'email': request.data.get('email', ''),
-            'phone': request.data.get('phone', ''),
+            'first_name': first_name,
+            'last_name': last_name,
+            'email': request.data.get('email', '') or '',
+            'phone': request.data.get('phone', '') or '',
             'password': password
         }
         
@@ -494,6 +598,32 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer = UserCreateSerializer(data=user_data)
         if serializer.is_valid():
             user = serializer.save()
+            
+            # Create TelegramProfile for new user (if not exists)
+            try:
+                telegram_profile = TelegramProfile.objects.get(telegram_id=telegram_id)
+                # Update existing profile
+                telegram_profile.user = user
+            except TelegramProfile.DoesNotExist:
+                # Create new profile
+                telegram_first_name = request.data.get('telegram_first_name', '') or ''
+                telegram_last_name = request.data.get('telegram_last_name', '') or ''
+                if telegram_first_name is None:
+                    telegram_first_name = ''
+                if telegram_last_name is None:
+                    telegram_last_name = ''
+                
+                telegram_profile = TelegramProfile.objects.create(
+                    user=user,
+                    telegram_id=telegram_id,
+                    telegram_first_name=telegram_first_name,
+                    telegram_last_name=telegram_last_name,
+                    telegram_username=request.data.get('telegram_username'),
+                    telegram_language_code=request.data.get('telegram_language_code'),
+                    telegram_is_premium=request.data.get('telegram_is_premium', False),
+                    telegram_is_bot=False
+                )
+            
             refresh = RefreshToken.for_user(user)
             return Response({
                 'refresh': str(refresh),

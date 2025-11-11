@@ -5,7 +5,7 @@ function Statistics({ stats }) {
   const COLORS = ['#229ED9', '#28a745', '#ffc107', '#dc3545', '#6c757d', '#17a2b8', '#6f42c1', '#e83e8c']
 
   const positionData = stats.tests_by_position?.map(item => ({
-    name: item.test__position || 'Noma\'lum',
+    name: item.user__position__name || 'Noma\'lum',
     value: item.count
   })) || []
 

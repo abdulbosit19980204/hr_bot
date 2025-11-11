@@ -141,19 +141,46 @@ async def notify_new_candidate(user_data: dict, position_name: str = None):
     await send_to_admin(message)
 
 
-async def notify_test_start(user_data: dict, test_title: str, questions_count: int):
+async def notify_test_start(user_data: dict, test_title: str, questions_count: int, test_description: str = None):
     """Notify admin about test start"""
     telegram_id = user_data.get('telegram_id', 'Noma\'lum')
-    first_name = user_data.get('first_name', '')
-    last_name = user_data.get('last_name', '')
+    
+    # Get name from telegram_profile if available, otherwise from user
+    telegram_profile = user_data.get('telegram_profile', {})
+    if telegram_profile:
+        first_name = telegram_profile.get('telegram_first_name', '').strip()
+        last_name = telegram_profile.get('telegram_last_name', '').strip()
+    else:
+        # Fallback to user's first_name/last_name (from registration)
+        first_name = user_data.get('first_name', '').strip()
+        last_name = user_data.get('last_name', '').strip()
+    
+    # Format full name
+    full_name = f"{first_name} {last_name}".strip()
+    if not full_name or full_name in ['hr_bot', 'bot']:
+        full_name = f"User {telegram_id}"
+    
+    # Format time nicely
+    time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
     message = (
         "🚀 <b>Test boshlandi</b>\n\n"
-        f"👤 <b>Kandidat:</b> {first_name} {last_name}\n"
+        f"👤 <b>Kandidat:</b> {full_name}\n"
         f"🆔 <b>Telegram ID:</b> {telegram_id}\n"
-        f"📝 <b>Test:</b> {test_title}\n"
+        f"📝 <b>Test nomi:</b> {test_title}\n"
+    )
+    
+    # Add test description if available
+    if test_description:
+        # Truncate long descriptions to avoid message too long
+        desc = test_description.strip()
+        if len(desc) > 200:
+            desc = desc[:200] + "..."
+        message += f"📄 <b>Test tavsifi:</b> {desc}\n"
+    
+    message += (
         f"📊 <b>Savollar soni:</b> {questions_count} ta\n"
-        f"⏰ <b>Vaqt:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"⏰ <b>Vaqt:</b> {time_str}\n"
     )
     
     await send_to_admin(message)
@@ -162,8 +189,21 @@ async def notify_test_start(user_data: dict, test_title: str, questions_count: i
 async def notify_test_result(user_data: dict, test_title: str, result_data: dict):
     """Notify admin about test result"""
     telegram_id = user_data.get('telegram_id', 'Noma\'lum')
-    first_name = user_data.get('first_name', '')
-    last_name = user_data.get('last_name', '')
+    
+    # Get name from telegram_profile if available, otherwise from user
+    telegram_profile = user_data.get('telegram_profile', {})
+    if telegram_profile:
+        first_name = telegram_profile.get('telegram_first_name', '').strip()
+        last_name = telegram_profile.get('telegram_last_name', '').strip()
+    else:
+        # Fallback to user's first_name/last_name (from registration)
+        first_name = user_data.get('first_name', '').strip()
+        last_name = user_data.get('last_name', '').strip()
+    
+    # Format full name - ensure it's not bot's name
+    full_name = f"{first_name} {last_name}".strip()
+    if not full_name or full_name in ['hr_bot', 'bot', '']:
+        full_name = f"User {telegram_id}"
     
     score = result_data.get('score', 0)
     total_questions = result_data.get('total_questions', 0)
@@ -174,18 +214,24 @@ async def notify_test_result(user_data: dict, test_title: str, result_data: dict
     status_emoji = "✅" if is_passed else "❌"
     status_text = "O'tdi" if is_passed else "O'tmadi"
     
+    # Format time nicely
+    minutes = time_taken // 60
+    seconds = time_taken % 60
+    time_str = f"{minutes} daqiqa {seconds} soniya" if minutes > 0 else f"{seconds} soniya"
+    completed_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
     message = (
         f"{status_emoji} <b>Test natijasi</b>\n\n"
-        f"👤 <b>Kandidat:</b> {first_name} {last_name}\n"
+        f"👤 <b>Kandidat:</b> {full_name}\n"
         f"🆔 <b>Telegram ID:</b> {telegram_id}\n"
         f"📝 <b>Test:</b> {test_title}\n\n"
         f"📊 <b>Natijalar:</b>\n"
         f"• Jami savollar: {total_questions}\n"
         f"• To'g'ri javoblar: {correct_answers}\n"
         f"• Ball: {score}%\n"
-        f"• Vaqt: {time_taken // 60} daqiqa {time_taken % 60} soniya\n"
-        f"• Holat: {status_text}\n"
-        f"⏰ <b>Yakunlangan vaqt:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"• Vaqt: {time_str}\n"
+        f"• Holat: {status_text}\n\n"
+        f"⏰ <b>Yakunlangan vaqt:</b> {completed_time}\n"
     )
     
     await send_to_admin(message)
@@ -255,8 +301,8 @@ class TestTaking(StatesGroup):
     completed = State()
 
 
-async def get_or_create_user(telegram_id: int, first_name: str, last_name: str = None):
-    """Get or create user via API"""
+async def get_or_create_user(telegram_id: int, first_name: str, last_name: str = None, telegram_username: str = None, language_code: str = None, is_premium: bool = False):
+    """Get or create user via API with Telegram info"""
     async with aiohttp.ClientSession() as session:
         # Try to authenticate/get user by telegram_id (POST request)
         async with session.post(
@@ -264,7 +310,10 @@ async def get_or_create_user(telegram_id: int, first_name: str, last_name: str =
             json={
                 'telegram_id': telegram_id,
                 'first_name': first_name,
-                'last_name': last_name or ''
+                'last_name': last_name or '',
+                'telegram_username': telegram_username,
+                'telegram_language_code': language_code,
+                'telegram_is_premium': is_premium
             }
         ) as resp:
             if resp.status in [200, 201]:
@@ -280,8 +329,15 @@ async def cmd_start(message: types.Message, state: FSMContext):
     user = message.from_user
     telegram_id = user.id
     
-    # Get or create user
-    user_data = await get_or_create_user(telegram_id, user.first_name, user.last_name)
+    # Get or create user with Telegram info
+    user_data = await get_or_create_user(
+        telegram_id, 
+        user.first_name, 
+        user.last_name,
+        telegram_username=user.username,
+        language_code=user.language_code,
+        is_premium=getattr(user, 'is_premium', False)
+    )
     
     if user_data:
         # User exists, check if profile is complete
@@ -453,6 +509,12 @@ async def process_position_selection(callback: types.CallbackQuery, state: FSMCo
                     'phone': data.get('phone'),
                     'email': data.get('email'),
                     'position_id': position_id,
+                    # Telegram ma'lumotlarini ham yuborish (TelegramProfile uchun)
+                    'telegram_first_name': callback.from_user.first_name or '',
+                    'telegram_last_name': callback.from_user.last_name or '',
+                    'telegram_username': callback.from_user.username,
+                    'telegram_language_code': callback.from_user.language_code,
+                    'telegram_is_premium': getattr(callback.from_user, 'is_premium', False),
                 }
                 
                 # Try to update existing user or create new one
@@ -1525,6 +1587,122 @@ async def cmd_upload_cv(message: types.Message):
                     "CV faylingizni yuboring (PDF, DOC, DOCX formatida).",
                     parse_mode="HTML"
                 )
+            else:
+                await message.answer("❌ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.")
+
+
+@dp.message(lambda m: m.document is not None)
+async def handle_document(message: types.Message):
+    """Handle document upload (CV)"""
+    document = message.document
+    telegram_id = message.from_user.id
+    
+    # Check file type (PDF, DOC, DOCX)
+    allowed_extensions = ['.pdf', '.doc', '.docx']
+    file_name = document.file_name or ''
+    file_ext = None
+    for ext in allowed_extensions:
+        if file_name.lower().endswith(ext):
+            file_ext = ext
+            break
+    
+    if not file_ext:
+        await message.answer(
+            "❌ <b>Noto'g'ri fayl formati!</b>\n\n"
+            "CV faqat quyidagi formatlarda bo'lishi kerak:\n"
+            "• PDF (.pdf)\n"
+            "• Word (.doc, .docx)\n\n"
+            "Iltimos, to'g'ri formatdagi fayl yuboring.",
+            parse_mode="HTML"
+        )
+        return
+    
+    # Check if user has passed any test
+    async with aiohttp.ClientSession() as session:
+        # Get user's test results
+        async with session.get(
+            f"{API_BASE_URL}/results/",
+            params={'user__telegram_id': telegram_id, 'is_completed': 'true'}
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                results = []
+                if isinstance(data, dict):
+                    results = data.get('results', [])
+                elif isinstance(data, list):
+                    results = data
+                
+                # Check if user has passed any test
+                has_passed = False
+                for result in results:
+                    if isinstance(result, dict):
+                        is_passed = result.get('is_passed', False)
+                        if is_passed:
+                            has_passed = True
+                            break
+                
+                if not has_passed:
+                    await message.answer(
+                        "⚠️ <b>Siz avval testdan o'tishingiz kerak!</b>\n\n"
+                        "CV yuklash uchun kamida bitta testdan muvaffaqiyatli o'tishingiz kerak.\n\n"
+                        "Test topshirish uchun /apply buyrug'ini yuboring.",
+                        parse_mode="HTML"
+                    )
+                    return
+                
+                # Download file from Telegram
+                try:
+                    file_info = await bot.get_file(document.file_id)
+                    file_path = file_info.file_path
+                    
+                    # Download file content - bot.download_file() returns bytes or file-like object
+                    file_content = await bot.download_file(file_path)
+                    
+                    # Convert to bytes if needed
+                    if isinstance(file_content, bytes):
+                        file_bytes = file_content
+                    elif hasattr(file_content, 'read'):
+                        # It's a file-like object, read it
+                        if asyncio.iscoroutinefunction(file_content.read):
+                            file_bytes = await file_content.read()
+                        else:
+                            file_bytes = file_content.read()
+                    else:
+                        # Try to convert to bytes
+                        file_bytes = bytes(file_content)
+                    
+                    # Prepare form data for API
+                    form_data = aiohttp.FormData()
+                    form_data.add_field('file', file_bytes, filename=file_name, content_type=document.mime_type or 'application/octet-stream')
+                    form_data.add_field('telegram_id', str(telegram_id))
+                    form_data.add_field('file_name', file_name)
+                    form_data.add_field('file_size', str(document.file_size))
+                    
+                    # Upload CV to API
+                    async with session.post(
+                        f"{API_BASE_URL}/cvs/",
+                        data=form_data
+                    ) as upload_resp:
+                        if upload_resp.status == 201:
+                            upload_data = await upload_resp.json()
+                            await message.answer(
+                                "✅ <b>CV muvaffaqiyatli yuklandi!</b>\n\n"
+                                "🎉 Biz sizga tez orada aloqaga chiqamiz va siz bilan birinchi Zoom interview uchun maslahatlarimizni beramiz.\n\n"
+                                "📞 Biz siz bilan tez orada bog'lanamiz!\n\n"
+                                "Rahmat! 🙏",
+                                parse_mode="HTML"
+                            )
+                        else:
+                            error_text = await upload_resp.text()
+                            logger.error(f"CV upload error: {upload_resp.status}, {error_text}")
+                            await message.answer(
+                                "❌ CV yuklashda xatolik yuz berdi. Iltimos, qayta urinib ko'ring yoki admin bilan bog'laning."
+                            )
+                except Exception as e:
+                    logger.error(f"Error downloading/uploading CV: {e}", exc_info=True)
+                    await message.answer(
+                        "❌ CV yuklashda xatolik yuz berdi. Iltimos, qayta urinib ko'ring."
+                    )
             else:
                 await message.answer("❌ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.")
 

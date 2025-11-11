@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from users.models import CV, Position
+from users.models import CV, Position, TelegramProfile
 from tests.models import Test, Question, AnswerOption, TestResult, UserAnswer
 
 User = get_user_model()
@@ -70,15 +70,27 @@ class TestListSerializer(serializers.ModelSerializer):
                   'trial_questions_count', 'is_active', 'questions_count', 'created_at']
 
 
+class TelegramProfileSerializer(serializers.ModelSerializer):
+    """Telegram Profile serializer"""
+    class Meta:
+        model = TelegramProfile
+        fields = ['telegram_id', 'telegram_first_name', 'telegram_last_name', 
+                  'telegram_username', 'telegram_language_code', 'telegram_is_premium', 
+                  'telegram_is_bot', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
+
+
 class UserSerializer(serializers.ModelSerializer):
     position = PositionSerializer(read_only=True)
     position_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    telegram_profile = TelegramProfileSerializer(read_only=True)
 
     class Meta:
         model = User
         fields = ['id', 'username', 'first_name', 'last_name', 'email', 'phone', 
-                  'position', 'position_id', 'telegram_id', 'is_blocked', 
-                  'blocked_reason', 'trial_tests_taken', 'created_at']
+                  'position', 'position_id', 'telegram_id', 'telegram_profile',
+                  'notification_enabled', 'is_blocked', 'blocked_reason', 
+                  'trial_tests_taken', 'created_at']
         read_only_fields = ['created_at', 'is_blocked', 'blocked_reason', 'blocked_at']
 
 
@@ -253,6 +265,16 @@ class TestResultCreateSerializer(serializers.Serializer):
         # This ensures we check the same questions that were shown to the user
         is_trial = validated_data.get('is_trial', False)
         
+        # Determine total questions count (how many questions should be shown to user)
+        # This is used for score calculation - score should be based on total questions, not answered questions
+        if is_trial:
+            total_questions_count = test.trial_questions_count
+        elif test.random_questions_count > 0:
+            total_questions_count = test.random_questions_count
+        else:
+            # If no limit, use all questions count
+            total_questions_count = test.questions.count()
+        
         if unique_answers:
             # Get questions from the answers submitted
             # This ensures we check the exact questions that were shown to the user
@@ -276,7 +298,8 @@ class TestResultCreateSerializer(serializers.Serializer):
             logger.info(f"Using random questions: {len(questions)} questions (fallback)")
 
         # Update test result
-        result.total_questions = len(questions)
+        # total_questions should be the total number of questions that should be shown (not answered)
+        result.total_questions = total_questions_count
         result.time_taken = time_taken
         
         # Process unique answers
@@ -360,16 +383,18 @@ class TestResultCreateSerializer(serializers.Serializer):
                 logger.info(f"Question {question.id} was not answered by user {user.id} (telegram_id: {user.telegram_id}) in test {test_id}")
 
         # Update score
-        total_questions = len(questions)
-        score = int((correct_answers / total_questions) * 100) if total_questions > 0 else 0
+        # Score should be calculated based on total_questions_count (total questions that should be shown)
+        # not based on answered questions count
+        # Example: If 10 questions should be shown, user answered 5 and got 3 correct = 30% (not 60%)
+        score = int((correct_answers / total_questions_count) * 100) if total_questions_count > 0 else 0
         result.score = score
         result.correct_answers = correct_answers
-        result.total_questions = total_questions
+        # total_questions already set above to total_questions_count
         result.completed_at = timezone.now()
         result.is_completed = True
         result.save()
         
-        logger.info(f"Test result saved: User {user.username} (ID: {user.id}, Telegram ID: {user.telegram_id}), Score: {score}%, Correct: {correct_answers}/{total_questions}")
+        logger.info(f"Test result saved: User {user.username} (ID: {user.id}, Telegram ID: {user.telegram_id}), Score: {score}%, Correct: {correct_answers}/{total_questions_count} (answered: {len(questions)} questions)")
         
         # Mark trial test as taken
         is_trial = validated_data.get('is_trial', False)

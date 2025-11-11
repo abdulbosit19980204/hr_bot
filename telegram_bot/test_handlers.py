@@ -15,6 +15,51 @@ logger = logging.getLogger(__name__)
 
 API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api')
 
+async def time_checker_task(message: types.Message, state: FSMContext, notify_callback=None, notify_error_callback=None):
+    """Background task to check time limit periodically and update time display"""
+    try:
+        while True:
+            await asyncio.sleep(5)  # Check every 5 seconds
+            
+            data = await state.get_data()
+            
+            # Check if test is completed
+            if data.get('test_completed', False):
+                break
+            
+            # Get callbacks from state if not provided
+            if notify_callback is None:
+                notify_callback = data.get('notify_callback')
+            if notify_error_callback is None:
+                notify_error_callback = data.get('notify_error_callback')
+            
+            # Check time limit
+            time_expired = await check_time_limit(message, state, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
+            if time_expired:
+                break
+            
+            # Update message with current time if test is still active
+            current_question = data.get('current_question', 0)
+            questions = data.get('questions', [])
+            if questions and current_question < len(questions):
+                # Update time display in the current question
+                try:
+                    await show_question(message, state, current_question, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
+                except Exception as e:
+                    error_msg = str(e)
+                    # Check if it's "message is not modified" error - ignore it
+                    if "message is not modified" in error_msg.lower():
+                        # Message is the same, continue checking
+                        continue
+                    logger.error(f"Error updating time display: {e}", exc_info=True)
+                    # If message update fails, test might be completed or message deleted
+                    break
+    except asyncio.CancelledError:
+        logger.info("Time checker task cancelled")
+    except Exception as e:
+        logger.error(f"Error in time checker task: {e}", exc_info=True)
+
+
 async def start_telegram_test(callback: types.CallbackQuery, state: FSMContext, notify_callback=None, notify_start_callback=None, notify_error_callback=None):
     """Start Telegram test"""
     test_id = callback.data.split("_")[-1]
@@ -61,22 +106,62 @@ async def start_telegram_test(callback: types.CallbackQuery, state: FSMContext, 
                     await callback.answer("❌ Testda savollar mavjud emas", show_alert=True)
                     return
                 
-                # Get test title
+                # Get test title and description
                 test_title = test_data.get('title', 'Test')
+                test_description = test_data.get('description', '')
                 if is_trial:
                     test_title = f"🧪 Trial: {test_title}"
                 
-                # Get user data
-                user_data = {
-                    'telegram_id': callback.from_user.id,
-                    'first_name': callback.from_user.first_name or '',
-                    'last_name': callback.from_user.last_name or ''
-                }
+                # Get user data from API (to ensure we have correct user info)
+                user_data = None
+                async with aiohttp.ClientSession() as user_session:
+                    async with user_session.post(
+                        f"{API_BASE_URL}/users/telegram_auth/",
+                        json={
+                            'telegram_id': callback.from_user.id,
+                            'first_name': callback.from_user.first_name or '',
+                            'last_name': callback.from_user.last_name or ''
+                        }
+                    ) as user_resp:
+                        if user_resp.status in [200, 201]:
+                            user_response = await user_resp.json()
+                            user_data = user_response.get('user', {})
+                            # Ensure we have correct user data
+                            if user_data:
+                                # TelegramProfile'dan ism/familiyani olish (User table'dan emas)
+                                telegram_profile = user_data.get('telegram_profile', {})
+                                if telegram_profile:
+                                    telegram_first_name = telegram_profile.get('telegram_first_name', '')
+                                    telegram_last_name = telegram_profile.get('telegram_last_name', '')
+                                    # Agar telegram_profile'da ism bo'lsa, user_data'ga qo'shish
+                                    if telegram_first_name:
+                                        user_data['telegram_first_name'] = telegram_first_name
+                                    if telegram_last_name:
+                                        user_data['telegram_last_name'] = telegram_last_name
+                                
+                                # Fallback: agar telegram_profile bo'sh bo'lsa, callback'dan olish
+                                if not telegram_profile or not telegram_profile.get('telegram_first_name'):
+                                    if callback.from_user.first_name:
+                                        user_data['telegram_first_name'] = callback.from_user.first_name
+                                    if callback.from_user.last_name:
+                                        user_data['telegram_last_name'] = callback.from_user.last_name
                 
-                # Notify admin about test start
+                # If user_data not found or invalid, use fallback
+                if not user_data or not user_data.get('telegram_profile'):
+                    user_data = {
+                        'telegram_id': callback.from_user.id,
+                        'telegram_first_name': callback.from_user.first_name or 'User',
+                        'telegram_last_name': callback.from_user.last_name or '',
+                        'telegram_profile': {
+                            'telegram_first_name': callback.from_user.first_name or '',
+                            'telegram_last_name': callback.from_user.last_name or ''
+                        }
+                    }
+                
+                # Notify admin about test start (with test description)
                 if notify_start_callback:
                     try:
-                        await notify_start_callback(user_data, test_title, len(questions))
+                        await notify_start_callback(user_data, test_title, len(questions), test_description)
                     except Exception as e:
                         logger.error(f"Error notifying admin about test start: {e}", exc_info=True)
                 
@@ -98,6 +183,13 @@ async def start_telegram_test(callback: types.CallbackQuery, state: FSMContext, 
                 # Save notify_error_callback to state
                 await state.update_data(notify_error_callback=notify_error_callback)
                 
+                # Start background task to check time limit periodically
+                task = asyncio.create_task(
+                    time_checker_task(callback.message, state, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
+                )
+                # Save task to state so we can cancel it later if needed
+                await state.update_data(time_checker_task=task)
+                
                 # Show first question
                 await show_question(callback.message, state, 0, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
                 await callback.answer()
@@ -105,9 +197,67 @@ async def start_telegram_test(callback: types.CallbackQuery, state: FSMContext, 
                 await callback.answer("❌ Xatolik yuz berdi", show_alert=True)
 
 
+async def check_time_limit(message: types.Message, state: FSMContext, notify_callback=None, notify_error_callback=None):
+    """Check if time limit has been reached and complete test if needed"""
+    data = await state.get_data()
+    
+    # Check if test is already completed
+    if data.get('test_completed', False):
+        return False
+    
+    start_time = data.get('start_time')
+    time_limit = data.get('time_limit', 60 * 60)
+    
+    if not start_time:
+        return False
+    
+    elapsed_time = datetime.now().timestamp() - start_time
+    remaining_time = time_limit - elapsed_time
+    
+    # If time is up, complete the test
+    if remaining_time <= 0:
+        logger.info(f"Time limit reached for test {data.get('test_id')}, completing test automatically")
+        
+        # Show message to user that time is up
+        try:
+            await message.edit_text(
+                "⏰ <b>Vaqt tugadi!</b>\n\n"
+                "Test avtomatik yakunlandi. Natijalar hisoblanmoqda...",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.error(f"Error showing time expired message: {e}", exc_info=True)
+            # Try to send as new message if edit fails
+            try:
+                await message.answer(
+                    "⏰ <b>Vaqt tugadi!</b>\n\n"
+                    "Test avtomatik yakunlandi. Natijalar hisoblanmoqda...",
+                    parse_mode="HTML"
+                )
+            except Exception as e2:
+                logger.error(f"Error sending time expired message: {e2}", exc_info=True)
+        
+        # Complete the test
+        await complete_test(message, state, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
+        return True
+    
+    return False
+
+
 async def show_question(message: types.Message, state: FSMContext, question_index: int, notify_callback=None, notify_error_callback=None):
     """Show question to user"""
     data = await state.get_data()
+    
+    # Check if test is already completed
+    if data.get('test_completed', False):
+        logger.info("Test already completed, skipping show_question")
+        return
+    
+    # Check time limit first
+    time_expired = await check_time_limit(message, state, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
+    if time_expired:
+        return
+    
     questions = data.get('questions', [])
     answers = data.get('answers', [])
     
@@ -156,9 +306,34 @@ async def show_question(message: types.Message, state: FSMContext, question_inde
     # Save current state
     await state.update_data(current_question=question_index)
     
+    # Calculate time progress
+    start_time = data.get('start_time', datetime.now().timestamp())
+    time_limit = data.get('time_limit', 60 * 60)  # Default 60 minutes in seconds
+    elapsed_time = datetime.now().timestamp() - start_time
+    remaining_time = max(0, time_limit - elapsed_time)
+    
+    # Calculate progress percentage (0-100)
+    progress_percentage = min(100, max(0, int((elapsed_time / time_limit) * 100))) if time_limit > 0 else 0
+    
+    # Create progress bar (20 characters)
+    progress_bar_length = 20
+    filled = int((progress_percentage / 100) * progress_bar_length)
+    empty = progress_bar_length - filled
+    progress_bar = "█" * filled + "░" * empty
+    
+    # Format time
+    remaining_minutes = int(remaining_time // 60)
+    remaining_seconds = int(remaining_time % 60)
+    elapsed_minutes = int(elapsed_time // 60)
+    elapsed_seconds = int(elapsed_time % 60)
+    total_minutes = int(time_limit // 60)
+    
     # Show question with progress and stats
     text = f"❓ <b>Savol {question_index + 1}/{len(questions)}</b>\n"
     text += f"✅ <b>To'g'ri javoblar:</b> {correct_count}/{len(answers)} (jami {len(questions)} ta)\n\n"
+    text += f"⏱️ <b>Vaqt:</b> {elapsed_minutes}:{elapsed_seconds:02d} / {total_minutes}:00\n"
+    text += f"⏳ <b>Qolgan vaqt:</b> {remaining_minutes}:{remaining_seconds:02d}\n"
+    text += f"📊 <b>Progress:</b> {progress_bar} {progress_percentage}%\n\n"
     text += f"{question_text}"
     
     await message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
@@ -166,11 +341,18 @@ async def show_question(message: types.Message, state: FSMContext, question_inde
 
 async def process_answer(callback: types.CallbackQuery, state: FSMContext):
     """Process user's answer"""
+    data = await state.get_data()
+    
+    # Check time limit first
+    time_expired = await check_time_limit(callback.message, state, notify_callback=data.get('notify_callback'), notify_error_callback=data.get('notify_error_callback'))
+    if time_expired:
+        await callback.answer("⏰ Vaqt tugadi! Test avtomatik yakunlandi.", show_alert=True)
+        return
+    
     parts = callback.data.split("_")
     question_index = int(parts[1])
     option_id = int(parts[2])
     
-    data = await state.get_data()
     questions = data.get('questions', [])
     answers = data.get('answers', [])
     show_answers_immediately = data.get('show_answers_immediately', True)
@@ -242,13 +424,46 @@ async def process_answer(callback: types.CallbackQuery, state: FSMContext):
     # Get notify_callback from state if available
     notify_callback = data.get('notify_callback')
     notify_error_callback = data.get('notify_error_callback')
-    await show_question(callback.message, state, question_index + 1, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
-    await callback.answer()
+    
+    # Check time limit again before showing next question
+    time_expired = await check_time_limit(callback.message, state, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
+    if time_expired:
+        return
+    
+    # Check if this is the last question before showing next
+    if question_index + 1 >= len(questions):
+        # This is the last question, complete test
+        await complete_test(callback.message, state, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
+    else:
+        # Show next question
+        await show_question(callback.message, state, question_index + 1, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
+    
+    # Only answer callback if not already answered
+    if not show_answers_immediately:
+        await callback.answer()
 
 
 async def complete_test(message: types.Message, state: FSMContext, notify_callback=None, notify_error_callback=None):
     """Complete test and send results"""
     data = await state.get_data()
+    
+    # Check if test is already completed to prevent duplicate submissions
+    if data.get('test_completed', False):
+        logger.info("Test already completed, skipping duplicate completion")
+        return
+    
+    # Mark test as completed immediately to prevent duplicate calls
+    await state.update_data(test_completed=True)
+    
+    # Cancel background time checker task if exists
+    time_checker_task = data.get('time_checker_task')
+    if time_checker_task and not time_checker_task.done():
+        try:
+            time_checker_task.cancel()
+            logger.info("Time checker task cancelled")
+        except Exception as e:
+            logger.error(f"Error cancelling time checker task: {e}", exc_info=True)
+    
     test_id = data.get('test_id')
     is_trial = data.get('is_trial', False)
     
@@ -317,15 +532,56 @@ async def complete_test(message: types.Message, state: FSMContext, notify_callba
     except Exception as e:
         logger.warning(f"Could not check bot ID: {e}")
     
-    # Get user data
-    user_data = {
-        'telegram_id': telegram_id,
-        'first_name': message.from_user.first_name or '',
-        'last_name': message.from_user.last_name or ''
-    }
-    
-    # Send test result to API
+    # Get user data from API (to ensure we have correct user info)
+    user_data = None
     async with aiohttp.ClientSession() as session:
+        # First, get user data from API
+        async with session.post(
+            f"{API_BASE_URL}/users/telegram_auth/",
+            json={
+                'telegram_id': telegram_id,
+                'first_name': message.from_user.first_name or '',
+                'last_name': message.from_user.last_name or ''
+            }
+        ) as user_resp:
+            if user_resp.status in [200, 201]:
+                user_response = await user_resp.json()
+                user_data = user_response.get('user', {})
+                # Ensure we have correct user data
+                if user_data:
+                    # TelegramProfile'dan ism/familiyani olish (User table'dan emas)
+                    telegram_profile = user_data.get('telegram_profile', {})
+                    if telegram_profile:
+                        telegram_first_name = telegram_profile.get('telegram_first_name', '')
+                        telegram_last_name = telegram_profile.get('telegram_last_name', '')
+                        # Agar telegram_profile'da ism bo'lsa, user_data'ga qo'shish
+                        if telegram_first_name:
+                            user_data['telegram_first_name'] = telegram_first_name
+                        if telegram_last_name:
+                            user_data['telegram_last_name'] = telegram_last_name
+                    
+                    # Fallback: agar telegram_profile bo'sh bo'lsa, message'dan olish
+                    if not telegram_profile or not telegram_profile.get('telegram_first_name'):
+                        if message.from_user.first_name:
+                            user_data['telegram_first_name'] = message.from_user.first_name
+                        if message.from_user.last_name:
+                            user_data['telegram_last_name'] = message.from_user.last_name
+                    logger.info(f"Retrieved user data from API: {user_data.get('telegram_profile', {}).get('telegram_first_name', 'N/A')} (telegram_id: {telegram_id})")
+        
+        # If user_data not found or invalid, use fallback
+        if not user_data or not user_data.get('telegram_profile'):
+            user_data = {
+                'telegram_id': telegram_id,
+                'telegram_first_name': message.from_user.first_name or 'User',
+                'telegram_last_name': message.from_user.last_name or '',
+                'telegram_profile': {
+                    'telegram_first_name': message.from_user.first_name or '',
+                    'telegram_last_name': message.from_user.last_name or ''
+                }
+            }
+            logger.warning(f"User data not found or invalid in API, using fallback: {user_data}")
+        
+        # Send test result to API
         async with session.post(
             f"{API_BASE_URL}/results/",
             json={
@@ -344,7 +600,7 @@ async def complete_test(message: types.Message, state: FSMContext, notify_callba
                 is_passed = result.get('is_passed', False)
                 requires_cv = result.get('requires_cv', False)
                 
-                # Notify admin about test result
+                # Notify admin about test result (use user_data from API)
                 if notify_callback:
                     try:
                         await notify_callback(user_data, test_title, result)
@@ -416,10 +672,17 @@ async def complete_test(message: types.Message, state: FSMContext, notify_callba
                 
                 logger.info(f"Displaying test results (message length: {len(text)} chars)")
                 try:
+                    # Try to edit message, but if it fails (e.g., time expired message was shown), send as new message
                     await message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
                 except Exception as e:
+                    error_msg = str(e)
+                    # Check if it's "message is not modified" error - ignore it
+                    if "message is not modified" in error_msg.lower():
+                        logger.info("Message not modified (same content) - ignoring error")
+                        return
+                    
                     logger.error(f"Error displaying results: {e}", exc_info=True)
-                    # Try sending as new message if edit fails
+                    # Try sending as new message if edit fails (e.g., if time expired message was shown)
                     try:
                         await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
                     except Exception as e2:

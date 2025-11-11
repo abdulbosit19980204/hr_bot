@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, CV, Position
+from .models import User, CV, Position, TelegramProfile
 
 
 @admin.register(Position)
@@ -13,6 +13,15 @@ class PositionAdmin(admin.ModelAdmin):
     def tests_count(self, obj):
         return obj.tests.count()
     tests_count.short_description = 'Tests'
+
+
+@admin.register(TelegramProfile)
+class TelegramProfileAdmin(admin.ModelAdmin):
+    list_display = ['user', 'telegram_id', 'telegram_first_name', 'telegram_last_name', 'telegram_username', 'telegram_is_premium', 'created_at']
+    list_filter = ['telegram_is_premium', 'telegram_is_bot', 'created_at']
+    search_fields = ['user__username', 'telegram_id', 'telegram_first_name', 'telegram_last_name', 'telegram_username']
+    readonly_fields = ['created_at', 'updated_at']
+    raw_id_fields = ['user']
 
 
 @admin.register(User)
