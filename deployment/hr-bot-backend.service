@@ -1,0 +1,30 @@
+[Unit]
+Description=HR Bot Django Backend (Gunicorn)
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=notify
+User=e-catalog
+Group=e-catalog
+WorkingDirectory=/home/e-catalog/hr_bot/backend
+Environment="PATH=/home/e-catalog/hr_bot/backend/venv/bin"
+ExecStart=/home/e-catalog/hr_bot/backend/venv/bin/gunicorn \
+    --config /home/e-catalog/hr_bot/deployment/gunicorn_config.py \
+    hr_bot.wsgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=10
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hr-bot-backend
+
+[Install]
+WantedBy=multi-user.target
+

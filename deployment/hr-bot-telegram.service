@@ -1,0 +1,27 @@
+[Unit]
+Description=HR Bot Telegram Bot
+After=network.target
+Requires=network.target
+
+[Service]
+Type=simple
+User=e-catalog
+Group=e-catalog
+WorkingDirectory=/home/e-catalog/hr_bot/telegram_bot
+Environment="PATH=/home/e-catalog/hr_bot/telegram_bot/venv/bin"
+ExecStart=/home/e-catalog/hr_bot/telegram_bot/venv/bin/python bot.py
+Restart=always
+RestartSec=10
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hr-bot-telegram
+
+[Install]
+WantedBy=multi-user.target
+
