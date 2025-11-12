@@ -329,6 +329,9 @@ async def cmd_start(message: types.Message, state: FSMContext):
     user = message.from_user
     telegram_id = user.id
     
+    # Clear any existing state first
+    await state.clear()
+    
     # Get or create user with Telegram info
     user_data = await get_or_create_user(
         telegram_id, 
@@ -340,17 +343,68 @@ async def cmd_start(message: types.Message, state: FSMContext):
     )
     
     if user_data:
-        # User exists, check if profile is complete
-        if not user_data.get('phone') or not user_data.get('email') or not user_data.get('position'):
-            await message.answer(
-                "👋 Salom! Profilingizni to'ldirish kerak.\n\n"
-                "Iltimos, ismingizni kiriting:"
-            )
-            await state.set_state(UserRegistration.waiting_for_first_name)
-        else:
-            # Profile complete, show main menu
+        # Check if user is already registered (has phone, email, and position)
+        # If registered, show main menu directly without asking for registration again
+        has_phone = user_data.get('phone') and user_data.get('phone').strip()
+        has_email = user_data.get('email') and user_data.get('email').strip()
+        has_position = user_data.get('position') is not None
+        
+        if has_phone and has_email and has_position:
+            # User is already registered, show main menu
             await show_main_menu(message, user_data)
+        else:
+            # User exists but profile is incomplete, start registration
+            # Check what's missing and start from there
+            if not user_data.get('first_name') or not user_data.get('first_name').strip():
+                await message.answer(
+                    "👋 Salom! Profilingizni to'ldirish kerak.\n\n"
+                    "Iltimos, ismingizni kiriting:"
+                )
+                await state.set_state(UserRegistration.waiting_for_first_name)
+            elif not user_data.get('last_name') or not user_data.get('last_name').strip():
+                await state.update_data(first_name=user_data.get('first_name', ''))
+                await message.answer(
+                    f"Salom, {user_data.get('first_name')}!\n\n"
+                    "Iltimos, familiyangizni kiriting:"
+                )
+                await state.set_state(UserRegistration.waiting_for_last_name)
+            elif not has_phone:
+                await state.update_data(
+                    first_name=user_data.get('first_name', ''),
+                    last_name=user_data.get('last_name', '')
+                )
+                keyboard = ReplyKeyboardMarkup(
+                    keyboard=[[KeyboardButton(
+                        text="📱 Telefon raqamni yuborish", request_contact=True)]],
+                    resize_keyboard=True,
+                    one_time_keyboard=True
+                )
+                await message.answer(
+                    "Telefon raqamingizni yuboring:",
+                    reply_markup=keyboard
+                )
+                await state.set_state(UserRegistration.waiting_for_phone)
+            elif not has_email:
+                await state.update_data(
+                    first_name=user_data.get('first_name', ''),
+                    last_name=user_data.get('last_name', ''),
+                    phone=user_data.get('phone', '')
+                )
+                await message.answer("Email manzilingizni kiriting:")
+                await state.set_state(UserRegistration.waiting_for_email)
+            elif not has_position:
+                await state.update_data(
+                    first_name=user_data.get('first_name', ''),
+                    last_name=user_data.get('last_name', ''),
+                    phone=user_data.get('phone', ''),
+                    email=user_data.get('email', '')
+                )
+                await show_positions(message, state)
+            else:
+                # Should not reach here, but just in case
+                await show_main_menu(message, user_data)
     else:
+        # User doesn't exist, start registration from beginning
         await message.answer(
             "👋 Salom! Xush kelibsiz!\n\n"
             "Iltimos, ismingizni kiriting:"

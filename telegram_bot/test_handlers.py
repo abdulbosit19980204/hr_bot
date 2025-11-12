@@ -36,6 +36,8 @@ async def time_checker_task(message: types.Message, state: FSMContext, notify_ca
             # Check time limit
             time_expired = await check_time_limit(message, state, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
             if time_expired:
+                # Time expired, test completed by check_time_limit
+                # complete_test is already called in check_time_limit
                 break
             
             # Update message with current time if test is still active
@@ -56,6 +58,25 @@ async def time_checker_task(message: types.Message, state: FSMContext, notify_ca
                     break
     except asyncio.CancelledError:
         logger.info("Time checker task cancelled")
+        # When cancelled, check if test needs to be completed
+        # This can happen if time limit is reached or test is manually completed
+        data = await state.get_data()
+        if not data.get('test_completed', False):
+            # Test not completed yet, check time limit one more time
+            try:
+                # Get callbacks from state
+                notify_callback = data.get('notify_callback')
+                notify_error_callback = data.get('notify_error_callback')
+                
+                # Check time limit one final time
+                time_expired = await check_time_limit(message, state, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
+                if not time_expired:
+                    # Time not expired, but task was cancelled - complete test anyway
+                    # This ensures test results are saved even if task is cancelled unexpectedly
+                    logger.info("Time checker task cancelled but test not completed, completing test now")
+                    await complete_test(message, state, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
+            except Exception as e:
+                logger.error(f"Error completing test after cancellation: {e}", exc_info=True)
     except Exception as e:
         logger.error(f"Error in time checker task: {e}", exc_info=True)
 
@@ -97,6 +118,37 @@ async def start_telegram_test(callback: types.CallbackQuery, state: FSMContext, 
                     parse_mode="HTML"
                 )
                 await callback.answer("⚠️ Siz block qilingansiz!", show_alert=True)
+                return
+            
+            if resp.status == 400:
+                # Attempts limit reached
+                try:
+                    error_data = await resp.json()
+                    error_message = error_data.get('message', error_data.get('error', 'Urinishlar soni tugagan'))
+                    attempts_used = error_data.get('attempts_used', 0)
+                    max_attempts = error_data.get('max_attempts') or error_data.get('max_trial_attempts', 0)
+                    
+                    # Show user-friendly message with attempts info
+                    if is_trial:
+                        message_text = (
+                            f"⚠️ <b>Trial test urinishlari tugagan</b>\n\n"
+                            f"📊 <b>Ishlangan:</b> {attempts_used} marta\n"
+                            f"📈 <b>Ruxsat etilgan:</b> {max_attempts} marta\n\n"
+                            f"Siz trial testni {attempts_used} marta ishlagansiz va ruxsat etilgan urinishlar soni ({max_attempts}) tugagan."
+                        )
+                    else:
+                        message_text = (
+                            f"⚠️ <b>Test urinishlari tugagan</b>\n\n"
+                            f"📊 <b>Ishlangan:</b> {attempts_used} marta\n"
+                            f"📈 <b>Ruxsat etilgan:</b> {max_attempts} marta\n\n"
+                            f"Siz bu testni {attempts_used} marta ishlagansiz va ruxsat etilgan urinishlar soni ({max_attempts}) tugagan."
+                        )
+                    
+                    await callback.message.edit_text(message_text, parse_mode="HTML")
+                    await callback.answer(error_message, show_alert=True)
+                except Exception as e:
+                    logger.error(f"Error handling 400 response: {e}", exc_info=True)
+                    await callback.answer("❌ Xatolik yuz berdi", show_alert=True)
                 return
             
             if resp.status == 200:
@@ -166,6 +218,8 @@ async def start_telegram_test(callback: types.CallbackQuery, state: FSMContext, 
                         logger.error(f"Error notifying admin about test start: {e}", exc_info=True)
                 
                 # Save test data - IMPORTANT: Save telegram_id to state
+                # Clear test_completed flag when starting new test
+                # First, clear any existing test state to ensure clean start
                 await state.update_data(
                     test_id=test_id,
                     questions=questions,
@@ -176,9 +230,10 @@ async def start_telegram_test(callback: types.CallbackQuery, state: FSMContext, 
                     show_answers_immediately=test_data.get('show_answers_immediately', True),
                     is_trial=is_trial,
                     telegram_id=callback.from_user.id,  # Save user's telegram_id to state
-                    test_data=test_data  # Save test_data for later use
+                    test_data=test_data,  # Save test_data for later use
+                    test_completed=False  # Reset test_completed flag when starting new test
                 )
-                logger.info(f"Test data saved to state, telegram_id: {callback.from_user.id}")
+                logger.info(f"Test data saved to state, telegram_id: {callback.from_user.id}, test_completed=False")
                 
                 # Save notify_error_callback to state
                 await state.update_data(notify_error_callback=notify_error_callback)
@@ -189,6 +244,9 @@ async def start_telegram_test(callback: types.CallbackQuery, state: FSMContext, 
                 )
                 # Save task to state so we can cancel it later if needed
                 await state.update_data(time_checker_task=task)
+                
+                # Ensure test_completed is False before showing question
+                await state.update_data(test_completed=False)
                 
                 # Show first question
                 await show_question(callback.message, state, 0, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
@@ -218,6 +276,15 @@ async def check_time_limit(message: types.Message, state: FSMContext, notify_cal
     if remaining_time <= 0:
         logger.info(f"Time limit reached for test {data.get('test_id')}, completing test automatically")
         
+        # Cancel background time checker task if exists
+        time_checker_task = data.get('time_checker_task')
+        if time_checker_task and not time_checker_task.done():
+            try:
+                time_checker_task.cancel()
+                logger.info("Time checker task cancelled")
+            except Exception as e:
+                logger.error(f"Error cancelling time checker task: {e}", exc_info=True)
+        
         # Show message to user that time is up
         try:
             await message.edit_text(
@@ -237,7 +304,9 @@ async def check_time_limit(message: types.Message, state: FSMContext, notify_cal
             except Exception as e2:
                 logger.error(f"Error sending time expired message: {e2}", exc_info=True)
         
-        # Complete the test
+        # Complete the test - ensure results are saved and sent to chat
+        # NOTE: Don't set test_completed=True here, let complete_test do it
+        logger.info("Calling complete_test from check_time_limit")
         await complete_test(message, state, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
         return True
     
@@ -249,7 +318,10 @@ async def show_question(message: types.Message, state: FSMContext, question_inde
     data = await state.get_data()
     
     # Check if test is already completed
-    if data.get('test_completed', False):
+    test_completed = data.get('test_completed', False)
+    logger.info(f"show_question called: question_index={question_index}, test_completed={test_completed}, test_id={data.get('test_id')}")
+    
+    if test_completed:
         logger.info("Test already completed, skipping show_question")
         return
     
@@ -343,6 +415,11 @@ async def process_answer(callback: types.CallbackQuery, state: FSMContext):
     """Process user's answer"""
     data = await state.get_data()
     
+    # Check if test is already completed
+    if data.get('test_completed', False):
+        await callback.answer("⚠️ Test allaqachon yakunlangan", show_alert=True)
+        return
+    
     # Check time limit first
     time_expired = await check_time_limit(callback.message, state, notify_callback=data.get('notify_callback'), notify_error_callback=data.get('notify_error_callback'))
     if time_expired:
@@ -433,7 +510,10 @@ async def process_answer(callback: types.CallbackQuery, state: FSMContext):
     # Check if this is the last question before showing next
     if question_index + 1 >= len(questions):
         # This is the last question, complete test
-        await complete_test(callback.message, state, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
+        # Check again if test is already completed (race condition protection)
+        current_data = await state.get_data()
+        if not current_data.get('test_completed', False):
+            await complete_test(callback.message, state, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
     else:
         # Show next question
         await show_question(callback.message, state, question_index + 1, notify_callback=notify_callback, notify_error_callback=notify_error_callback)
@@ -455,7 +535,7 @@ async def complete_test(message: types.Message, state: FSMContext, notify_callba
     # Mark test as completed immediately to prevent duplicate calls
     await state.update_data(test_completed=True)
     
-    # Cancel background time checker task if exists
+    # Cancel background time checker task if exists (but don't wait for it)
     time_checker_task = data.get('time_checker_task')
     if time_checker_task and not time_checker_task.done():
         try:
@@ -474,16 +554,21 @@ async def complete_test(message: types.Message, state: FSMContext, notify_callba
     
     if not test_id:
         logger.error("test_id not found in state data")
+        # Log all state keys for debugging
+        logger.error(f"State data keys: {list(data.keys())}")
+        logger.error(f"State data: {data}")
+        
         # Notify admin about error (but don't send result notification)
         if notify_error_callback:
             try:
                 await notify_error_callback(
                     "Test ID topilmadi",
                     "complete_test funksiyasida test_id topilmadi",
-                    user_id=message.from_user.id,
+                    user_id=telegram_id,  # Use telegram_id from state, not message.from_user.id
                     context={
                         'function': 'complete_test',
-                        'state_data_keys': list(data.keys())
+                        'state_data_keys': list(data.keys()),
+                        'telegram_id': telegram_id
                     }
                 )
             except Exception as e:
@@ -697,10 +782,54 @@ async def complete_test(message: types.Message, state: FSMContext, notify_callba
                     
                     logger.info(f"Sent {message_count} detailed answer messages")
                 
-                # Request CV upload if passed (not for trial tests)
+                # Send additional message after answers (for both passed and failed tests)
+                await asyncio.sleep(1)  # Small delay before sending additional message
+                
+                if is_passed:
+                    # Success message with CV upload request
+                    success_message = (
+                        "🎉 <b>Tabriklaymiz!</b>\n\n"
+                        "Siz testdan muvaffaqiyatli o'tdingiz!\n\n"
+                        "📄 Iltimos, bizga CV yingizni yuboring.\n\n"
+                        "CV yuklash uchun:\n"
+                        "• Menu'dan \"📄 CV yuklash\" tugmasini bosing\n"
+                        "• Yoki <code>/upload_cv</code> buyrug'ini yuboring\n"
+                        "• Yoki CV faylini to'g'ridan-to'g'ri yuboring"
+                    )
+                    
+                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="📄 CV yuklash", callback_data="upload_cv")],
+                        [InlineKeyboardButton(text="🔙 Asosiy menyu", callback_data="menu_back")]
+                    ])
+                    
+                    try:
+                        await message.answer(success_message, reply_markup=keyboard, parse_mode="HTML")
+                    except Exception as e:
+                        logger.error(f"Error sending success message: {e}", exc_info=True)
+                else:
+                    # Motivational message for failed tests
+                    motivational_message = (
+                        "💪 <b>Sizga katta rahmat!</b>\n\n"
+                        "Hozircha tajriba biroz yetishmasligi tabiiy holat — har bir muvaffaqiyat yo'li aynan shunday boshlanadi.\n\n"
+                        "Muhimi, sizda o'sishga bo'lgan ishtiyoq va qat'iyat bor.\n\n"
+                        "Ishonamizki, yaqin kelajakda siz yanada kuchli mutaxassis sifatida qayta uchrashamiz.\n\n"
+                        "🎯 Malakangizni oshirishda davom eting — keyingi safar albatta yanada yuqori natijaga erishasiz!"
+                    )
+                    
+                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="🔙 Asosiy menyu", callback_data="menu_back")]
+                    ])
+                    
+                    try:
+                        await message.answer(motivational_message, reply_markup=keyboard, parse_mode="HTML")
+                    except Exception as e:
+                        logger.error(f"Error sending motivational message: {e}", exc_info=True)
+                
+                # Old CV upload request (keep for backward compatibility, but now we send it above)
+                # This is now redundant but kept for safety
                 if is_passed and requires_cv and not is_trial:
-                    await asyncio.sleep(2)
-                    await request_cv_upload(message, state)
+                    # Already sent above, skip
+                    pass
             else:
                 error_text = await resp.text()
                 error_data = await resp.json() if resp.content_type == 'application/json' else {}
