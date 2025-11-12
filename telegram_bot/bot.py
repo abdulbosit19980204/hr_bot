@@ -43,7 +43,7 @@ load_dotenv()
 # Bot configuration
 BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
 API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:8000/api')
-WEBAPP_URL = os.getenv('TELEGRAM_WEBAPP_URL', 'https://yourdomain.com/webapp')
+WEBAPP_URL = os.getenv('TELEGRAM_WEBAPP_URL', 'https://unfunereal-matilda-frenular.ngrok-free.dev')
 ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID', '')  # Admin guruh yoki kanal ID
 
 # Initialize bot and dispatcher
@@ -855,7 +855,9 @@ async def process_test_selection(callback: types.CallbackQuery, state: FSMContex
                     
                 elif test_mode == 'webapp':
                     # Faqat WebApp
-                    webapp_url = f"{WEBAPP_URL}?test_id={test_id}&user_id={callback.from_user.id}"
+                    # Remove trailing slash and /webapp if present, then add query params
+                    base_url = WEBAPP_URL.rstrip('/').replace('/webapp', '')
+                    webapp_url = f"{base_url}?test_id={test_id}&user_id={callback.from_user.id}"
                     use_webapp = webapp_url.startswith('https://')
                     
                     try:
@@ -976,7 +978,9 @@ async def process_test_webapp(callback: types.CallbackQuery):
                 questions_count = test.get('questions_count', 0)
                 
                 # Create WebApp URL
-                webapp_url = f"{WEBAPP_URL}?test_id={test_id}&user_id={callback.from_user.id}"
+                # Remove trailing slash and /webapp if present, then add query params
+                base_url = WEBAPP_URL.rstrip('/').replace('/webapp', '')
+                webapp_url = f"{base_url}?test_id={test_id}&user_id={callback.from_user.id}"
                 use_webapp = webapp_url.startswith('https://')
                 
                 try:
