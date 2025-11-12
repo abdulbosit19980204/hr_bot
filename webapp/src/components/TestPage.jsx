@@ -47,6 +47,7 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
   const [startTime, setStartTime] = useState(initialStartTime)
   const [leaveAttempts, setLeaveAttempts] = useState(0)
   const [isBlocked, setIsBlocked] = useState(false)
+  const [errorMessage, setErrorMessage] = useState(null)
   const testContainerRef = useRef(null)
 
   // Save state to localStorage
@@ -274,6 +275,7 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
 
   const loadQuestions = async () => {
     try {
+      setLoading(true)
       const params = new URLSearchParams()
       if (user && user.telegram_id) {
         params.append('telegram_id', user.telegram_id)
@@ -282,10 +284,26 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
         params.append('trial', 'true')
       }
       
-      const response = await axios.get(
-        `${apiBaseUrl}/tests/${test.id}/questions/?${params.toString()}`
-      )
+      const apiUrl = `${apiBaseUrl}/tests/${test.id}/questions/?${params.toString()}`
+      console.log('🔍 Loading questions from:', apiUrl)
+      console.log('📝 Test ID:', test.id)
+      console.log('👤 User:', user)
+      console.log('🧪 Is Trial:', isTrial)
+      
+      const response = await axios.get(apiUrl)
+      console.log('✅ API Response:', response)
+      
       const loadedQuestions = response.data
+      console.log('📊 Loaded questions:', loadedQuestions)
+      
+      if (!loadedQuestions || !Array.isArray(loadedQuestions) || loadedQuestions.length === 0) {
+        console.error('❌ Questions are empty or invalid:', loadedQuestions)
+        setErrorMessage('Savollar topilmadi. Testda savollar mavjud emas yoki sizda testni yechish huquqi yo\'q.')
+        setQuestions([])
+        setLoading(false)
+        return
+      }
+      
       setQuestions(loadedQuestions)
       
       // Save questions to state immediately
@@ -293,14 +311,37 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
       
       setLoading(false)
     } catch (error) {
-      console.error('Error loading questions:', error)
+      console.error('❌ Error loading questions:', error)
+      console.error('📋 Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        url: error.config?.url
+      })
+      
       if (error.response?.status === 403) {
         clearState() // Clear state if blocked
         alert('Siz block qilingansiz: ' + (error.response?.data?.reason || 'Noma\'lum sabab'))
         if (window.Telegram && window.Telegram.WebApp) {
           window.Telegram.WebApp.close()
         }
+      } else if (error.response?.status === 400) {
+        // Attempts limit or other validation error
+        const errorMsg = error.response?.data?.message || error.response?.data?.error || 'Xatolik yuz berdi'
+        setErrorMessage(errorMsg)
+        alert(errorMsg)
+      } else if (error.response?.status === 404) {
+        const errorMsg = 'Test topilmadi yoki faol emas'
+        setErrorMessage(errorMsg)
+        alert(errorMsg)
+      } else {
+        const errorMsg = 'Savollar yuklashda xatolik: ' + (error.response?.data?.error || error.message || 'Noma\'lum xatolik')
+        setErrorMessage(errorMsg)
+        alert(errorMsg)
       }
+      
+      setQuestions([])
       setLoading(false)
     }
   }
@@ -386,8 +427,25 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
     return <div className="loading">Savollar yuklanmoqda...</div>
   }
 
-  if (questions.length === 0) {
-    return <div className="error">Savollar topilmadi</div>
+  if (questions.length === 0 && !loading) {
+    return (
+      <div className="error" style={{ padding: '20px', textAlign: 'center' }}>
+        <h3>Savollar topilmadi</h3>
+        {errorMessage && <p>{errorMessage}</p>}
+        <p style={{ marginTop: '10px', fontSize: '14px', color: '#666' }}>
+          Iltimos, quyidagilarni tekshiring:
+        </p>
+        <ul style={{ textAlign: 'left', display: 'inline-block', marginTop: '10px' }}>
+          <li>Test ID: {test?.id || 'Topilmadi'}</li>
+          <li>User ID: {user?.telegram_id || 'Topilmadi'}</li>
+          <li>Is Trial: {isTrial ? 'Ha' : 'Yo\'q'}</li>
+          <li>API URL: {apiBaseUrl || 'Topilmadi'}</li>
+        </ul>
+        <p style={{ marginTop: '10px', fontSize: '12px', color: '#999' }}>
+          Browser console'da batafsil ma'lumotni ko'rishingiz mumkin.
+        </p>
+      </div>
+    )
   }
 
   const currentQuestion = questions[currentQuestionIndex]
