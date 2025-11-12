@@ -99,9 +99,30 @@ echo [4/6] Starting Nginx (port 8080)...
 REM Stop existing Nginx if running
 taskkill /F /IM nginx.exe >nul 2>&1
 timeout /t 1 /nobreak >nul
-REM Change to nginx directory to ensure relative paths work
+REM Use full path to nginx.exe
+set NGINX_EXE=%SCRIPT_DIR%nginx\nginx-1.28.0\nginx.exe
+if not exist "%NGINX_EXE%" (
+    echo [ERROR] Nginx not found at: %NGINX_EXE%
+    echo Please install Nginx or update the path in start_all.bat
+    pause
+    exit /b 1
+)
+REM Create logs and temp directories if they don't exist
+if not exist "%SCRIPT_DIR%nginx\logs" mkdir "%SCRIPT_DIR%nginx\logs"
+if not exist "%SCRIPT_DIR%nginx\temp" mkdir "%SCRIPT_DIR%nginx\temp"
+if not exist "%SCRIPT_DIR%nginx\temp\client_body_temp" mkdir "%SCRIPT_DIR%nginx\temp\client_body_temp"
+if not exist "%SCRIPT_DIR%nginx\temp\fastcgi_temp" mkdir "%SCRIPT_DIR%nginx\temp\fastcgi_temp"
+if not exist "%SCRIPT_DIR%nginx\temp\proxy_temp" mkdir "%SCRIPT_DIR%nginx\temp\proxy_temp"
+if not exist "%SCRIPT_DIR%nginx\temp\scgi_temp" mkdir "%SCRIPT_DIR%nginx\temp\scgi_temp"
+if not exist "%SCRIPT_DIR%nginx\temp\uwsgi_temp" mkdir "%SCRIPT_DIR%nginx\temp\uwsgi_temp"
+REM Test configuration first
+"%NGINX_EXE%" -t -p "%SCRIPT_DIR%nginx" -c "nginx.local.conf" >nul 2>&1
+if errorlevel 1 (
+    echo [WARNING] Nginx configuration test failed, but continuing...
+)
+REM Start Nginx (change to nginx directory first)
 cd /d "%SCRIPT_DIR%nginx"
-start "HR Bot - Nginx" /MIN cmd /k "cd /d %SCRIPT_DIR%nginx && nginx -p %SCRIPT_DIR%nginx -c nginx.local.conf"
+start "HR Bot - Nginx" /MIN cmd /k "cd /d %SCRIPT_DIR%nginx && %NGINX_EXE% -p %SCRIPT_DIR%nginx -c nginx.local.conf"
 cd /d "%SCRIPT_DIR%"
 timeout /t 2 /nobreak >nul
 
