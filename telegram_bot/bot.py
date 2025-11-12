@@ -747,9 +747,12 @@ async def show_trial_tests(message: types.Message, position_id: int, user_data: 
                 
                 keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
                 
+                # Get max_trial_attempts from first test (assuming all tests have same max_trial_attempts)
+                max_trial_attempts = trial_tests[0].get('max_trial_attempts', 1) if trial_tests else 1
+                
                 text = (
                     "🧪 <b>Trial Testlar</b>\n\n"
-                    "Har bir testdan bir marta trial test yechishingiz mumkin.\n"
+                    f"Har bir testdan {max_trial_attempts} marta trial test yechishingiz mumkin.\n"
                     "Trial testda 10 ta savol beriladi.\n\n"
                     "Testni tanlang:"
                 )

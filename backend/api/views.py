@@ -119,14 +119,7 @@ class TestViewSet(viewsets.ModelViewSet):
                 
                 # Check trial test attempts
                 if is_trial:
-                    trial_tests = user.trial_tests_taken or []
-                    if test.id in trial_tests:
-                        return Response(
-                            {'error': 'Trial test already taken for this test', 'max_trial_attempts': test.max_trial_attempts},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
-                    
-                    # Check trial attempts count
+                    # Check trial attempts count (main check based on completed results)
                     trial_results = TestResult.objects.filter(
                         user=user,
                         test=test,
@@ -208,14 +201,7 @@ class TestViewSet(viewsets.ModelViewSet):
                 
                 # Check trial test attempts
                 if is_trial:
-                    trial_tests = user.trial_tests_taken or []
-                    if test.id in trial_tests:
-                        return Response(
-                            {'error': 'Trial test already taken for this test', 'max_trial_attempts': test.max_trial_attempts},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
-                    
-                    # Check trial attempts count
+                    # Check trial attempts count (main check based on completed results)
                     trial_results = TestResult.objects.filter(
                         user=user,
                         test=test,
