@@ -715,7 +715,7 @@ async def show_trial_tests(message: types.Message, position_id: int, user_data: 
                     )
                     return
                 
-                # Get user's trial tests taken
+                # Get user's trial tests taken (for display only, actual check is done via API)
                 trial_tests_taken = user_data.get('trial_tests_taken', []) or []
                 
                 keyboard_buttons = []
@@ -723,6 +723,11 @@ async def show_trial_tests(message: types.Message, position_id: int, user_data: 
                     test_id = test.get('id')
                     test_title = test.get('title', 'Test')
                     trial_count = test.get('trial_questions_count', 10)
+                    max_trial_attempts = test.get('max_trial_attempts', 1)
+                    
+                    # Count completed trial attempts for this test from database via API
+                    # For now, just check if test_id is in trial_tests_taken list
+                    # The actual max_trial_attempts check will be done in handle_trial_test via API
                     is_taken = test_id in trial_tests_taken
                     
                     button_text = f"🧪 {test_title} ({trial_count} savol)"
@@ -1557,20 +1562,32 @@ async def handle_trial_test(callback: types.CallbackQuery, state: FSMContext):
                     )
                     return
                 
-                # Check if user already took trial test
-                user_data = await get_or_create_user(
-                    callback.from_user.id, 
-                    callback.from_user.first_name, 
-                    callback.from_user.last_name
-                )
-                trial_tests_taken = user_data.get('trial_tests_taken', []) or []
-                
-                if int(test_id) in trial_tests_taken:
-                    await callback.answer(
-                        "⚠️ Siz bu testdan trial test olgansiz. Faqat bir marta yechishingiz mumkin.",
-                        show_alert=True
-                    )
-                    return
+                # Check trial test attempts using API (backend checks max_trial_attempts from Test model)
+                # First, try to get test questions to check if user can start trial test
+                async with session.get(
+                    f"{API_BASE_URL}/tests/{test_id}/questions/",
+                    params={'trial': 'true', 'telegram_id': callback.from_user.id}
+                ) as check_resp:
+                    if check_resp.status == 400:
+                        # User has reached max trial attempts
+                        error_data = await check_resp.json()
+                        error_message = error_data.get('message') or error_data.get('error', 'Trial test urinishlari tugagan')
+                        max_attempts = error_data.get('max_trial_attempts', 1)
+                        attempts_used = error_data.get('attempts_used', 0)
+                        
+                        await callback.answer(
+                            f"⚠️ {error_message}\n\n"
+                            f"Ishlatilgan urinishlar: {attempts_used}/{max_attempts}",
+                            show_alert=True
+                        )
+                        return
+                    elif check_resp.status != 200:
+                        # Other error
+                        await callback.answer(
+                            "❌ Test yuklashda xatolik yuz berdi",
+                            show_alert=True
+                        )
+                        return
                 
                 # Save test data to state for Telegram test
                 await state.update_data(
