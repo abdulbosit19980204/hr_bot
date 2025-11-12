@@ -9,28 +9,40 @@ import Error from './components/Error'
 
 // Determine API URL based on current location or environment variable
 const getApiBaseUrl = () => {
-  // First, check environment variable
+  // First, check environment variable (highest priority)
   if (import.meta.env.VITE_API_BASE_URL) {
+    console.log('✅ Using API URL from environment variable:', import.meta.env.VITE_API_BASE_URL)
     return import.meta.env.VITE_API_BASE_URL
   }
   
-  // If running on Ngrok, use the same domain for API
+  // If running on Ngrok, try to use the same domain for API
   const currentHost = window.location.hostname
   const currentProtocol = window.location.protocol
+  const currentPort = window.location.port
   
   // Check if it's an Ngrok domain
   if (currentHost.includes('ngrok-free.dev') || currentHost.includes('ngrok.io')) {
-    // Use the same Ngrok domain for API (backend should be proxied through Ngrok)
-    return `${currentProtocol}//${currentHost}/api`
+    // Try using the same Ngrok domain for API
+    // NOTE: This assumes backend API is also exposed through the same Ngrok tunnel
+    // If backend is on a different Ngrok tunnel, use VITE_API_BASE_URL environment variable
+    const apiUrl = `${currentProtocol}//${currentHost}/api`
+    console.log('🌐 Detected Ngrok domain, using API URL:', apiUrl)
+    console.log('⚠️ If you get 404 errors, make sure backend API is also exposed through Ngrok')
+    console.log('💡 Alternative: Set VITE_API_BASE_URL environment variable to your backend Ngrok URL')
+    return apiUrl
   }
   
   // Check if it's localhost (development)
   if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
-    return 'http://localhost:8000/api'
+    const apiUrl = 'http://localhost:8000/api'
+    console.log('🏠 Using localhost API URL:', apiUrl)
+    return apiUrl
   }
   
   // Default fallback
-  return 'http://localhost:8000/api'
+  const apiUrl = 'http://localhost:8000/api'
+  console.log('⚠️ Using default API URL:', apiUrl)
+  return apiUrl
 }
 
 const API_BASE_URL = getApiBaseUrl()
@@ -162,12 +174,35 @@ function App() {
       } else {
         setError('Foydalanuvchi topilmadi')
       }
-    } catch (err) {
-      console.error('Initialization error:', err)
+        } catch (err) {
+      console.error('❌ Initialization error:', err)
+      console.error('📋 Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        url: err.config?.url,
+        apiBaseUrl: API_BASE_URL
+      })
+      
       if (err.response?.status === 403) {
         setError(`Siz block qilingansiz: ${err.response?.data?.reason || "Noma'lum sabab"}`)
+      } else if (err.response?.status === 404) {
+        setError(
+          `❌ <b>404 Xatolik</b><br/><br/>` +
+          `API topilmadi. Quyidagilarni tekshiring:<br/>` +
+          `• API URL: ${API_BASE_URL}<br/>` +
+          `• Backend API Ngrok orqali expose qilinganmi?<br/>` +
+          `• VITE_API_BASE_URL environment variable to'g'ri sozlanganmi?<br/><br/>` +
+          `💡 <b>Yechim:</b> Backend API'ni ham Ngrok orqali expose qiling yoki ` +
+          `VITE_API_BASE_URL environment variable'ni to'g'ri sozlang.`
+        )
       } else {
-        setError(err.response?.data?.error || err.message || 'Xatolik yuz berdi')
+        setError(
+          `❌ <b>Xatolik</b><br/><br/>` +
+          `${err.response?.data?.error || err.message || 'Noma\'lum xatolik'}<br/><br/>` +
+          `API URL: ${API_BASE_URL}`
+        )
       }
     } finally {
       setLoading(false)
