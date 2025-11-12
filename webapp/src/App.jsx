@@ -7,7 +7,38 @@ import CVUploadPage from './components/CVUploadPage'
 import Loading from './components/Loading'
 import Error from './components/Error'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+// Determine API URL based on current location or environment variable
+const getApiBaseUrl = () => {
+  // First, check environment variable
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL
+  }
+  
+  // If running on Ngrok, use the same domain for API
+  const currentHost = window.location.hostname
+  const currentProtocol = window.location.protocol
+  
+  // Check if it's an Ngrok domain
+  if (currentHost.includes('ngrok-free.dev') || currentHost.includes('ngrok.io')) {
+    // Use the same Ngrok domain for API (backend should be proxied through Ngrok)
+    return `${currentProtocol}//${currentHost}/api`
+  }
+  
+  // Check if it's localhost (development)
+  if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+    return 'http://localhost:8000/api'
+  }
+  
+  // Default fallback
+  return 'http://localhost:8000/api'
+}
+
+const API_BASE_URL = getApiBaseUrl()
+
+// Log API URL for debugging
+console.log('🌐 API Base URL:', API_BASE_URL)
+console.log('📍 Current Location:', window.location.href)
+console.log('🏠 Current Hostname:', window.location.hostname)
 
 function App() {
   const [loading, setLoading] = useState(true)
