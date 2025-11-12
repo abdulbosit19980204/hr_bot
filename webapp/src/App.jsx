@@ -28,6 +28,40 @@ function App() {
       const testId = urlParams.get('test_id')
       let userId = urlParams.get('user_id')
       const isTrial = urlParams.get('trial') === 'true'
+      const debugMode = urlParams.get('debug') === 'true'
+
+      // Debug mode: Show all URL parameters and environment info
+      if (debugMode) {
+        const debugInfo = {
+          fullUrl: window.location.href,
+          search: window.location.search,
+          hash: window.location.hash,
+          urlParams: Object.fromEntries(urlParams.entries()),
+          testId: testId,
+          userId: userId,
+          isTrial: isTrial,
+          telegramWebApp: !!window.Telegram?.WebApp,
+          telegramUser: window.Telegram?.WebApp?.initDataUnsafe?.user || null,
+          apiBaseUrl: API_BASE_URL
+        }
+        console.log('🔍 DEBUG MODE - URL Information:', debugInfo)
+        setError(
+          `🔍 <b>DEBUG MODE</b><br/><br/>` +
+          `📋 <b>Full URL:</b> ${window.location.href}<br/>` +
+          `🔗 <b>Search:</b> ${window.location.search}<br/>` +
+          `📝 <b>Test ID:</b> ${testId || 'TOPILMADI'}<br/>` +
+          `👤 <b>User ID:</b> ${userId || 'TOPILMADI'}<br/>` +
+          `🧪 <b>Is Trial:</b> ${isTrial}<br/>` +
+          `📱 <b>Telegram WebApp:</b> ${window.Telegram?.WebApp ? 'Mavjud' : 'Mavjud emas'}<br/>` +
+          `🌐 <b>API Base URL:</b> ${API_BASE_URL}<br/><br/>` +
+          `📊 <b>Barcha URL parametrlari:</b><br/>` +
+          Array.from(urlParams.entries()).map(([key, value]) => `${key}: ${value}`).join('<br/>') +
+          `<br/><br/>` +
+          `📱 <b>Telegram User:</b> ${window.Telegram?.WebApp?.initDataUnsafe?.user ? JSON.stringify(window.Telegram.WebApp.initDataUnsafe.user, null, 2) : 'Mavjud emas'}`
+        )
+        setLoading(false)
+        return
+      }
 
       // Try to get user_id from Telegram WebApp
       if (!userId && window.Telegram && window.Telegram.WebApp) {

@@ -901,7 +901,18 @@ async def process_test_selection(callback: types.CallbackQuery, state: FSMContex
                             message_text += "⚠️ <b>Development rejimida</b>\n\n"
                             message_text += f"Testni boshlash uchun quyidagi linkni brauzerda oching:\n\n"
                             message_text += f"<code>{webapp_url}</code>\n\n"
-                            message_text += f"Yoki linkni bosib oching:\n<a href=\"{webapp_url}\">🚀 Testni boshlash</a>"
+                            # Add two buttons: one for web browser, one for Telegram browser
+                            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(
+                                    text="🌐 Web Browserda ochish",
+                                    url=webapp_url
+                                )],
+                                [InlineKeyboardButton(
+                                    text="🔍 URL ma'lumotlarini tekshirish",
+                                    url=f"{webapp_url}&debug=true"
+                                )],
+                                [InlineKeyboardButton(text="🔙 Orqaga", callback_data="menu_back")]
+                            ])
                         else:
                             message_text += "Testni boshlash uchun quyidagi tugmani bosing:"
                         
@@ -1016,13 +1027,21 @@ async def process_test_webapp(callback: types.CallbackQuery):
                     else:
                         # HTTP - Telegram HTTP URL'larni qabul qilmaydi, shuning uchun oddiy matn link ko'rsatamiz
                         # Linkni ko'rsatish va URL ni nusxalash uchun button qo'shamiz
-                        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                            [InlineKeyboardButton(text="🔙 Orqaga", callback_data="menu_back")]
-                        ])
                         message_text += "⚠️ <b>Development rejimida</b>\n\n"
                         message_text += f"Testni boshlash uchun quyidagi linkni brauzerda oching:\n\n"
                         message_text += f"<code>{webapp_url}</code>\n\n"
-                        message_text += f"Yoki linkni bosib oching:\n<a href=\"{webapp_url}\">🚀 Testni boshlash</a>"
+                        # Add two buttons: one for web browser, one for Telegram browser with debug
+                        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                            [InlineKeyboardButton(
+                                text="🌐 Web Browserda ochish",
+                                url=webapp_url
+                            )],
+                            [InlineKeyboardButton(
+                                text="🔍 URL ma'lumotlarini tekshirish",
+                                url=f"{webapp_url}&debug=true"
+                            )],
+                            [InlineKeyboardButton(text="🔙 Orqaga", callback_data="menu_back")]
+                        ])
                     
                     await callback.message.edit_text(
                         message_text,
