@@ -99,7 +99,10 @@ echo [4/6] Starting Nginx (port 8080)...
 REM Stop existing Nginx if running
 taskkill /F /IM nginx.exe >nul 2>&1
 timeout /t 1 /nobreak >nul
-start "HR Bot - Nginx" /MIN cmd /k "nginx -c %SCRIPT_DIR%nginx\nginx.local.conf"
+REM Change to nginx directory to ensure relative paths work
+cd /d "%SCRIPT_DIR%nginx"
+start "HR Bot - Nginx" /MIN cmd /k "cd /d %SCRIPT_DIR%nginx && nginx -p %SCRIPT_DIR%nginx -c nginx.local.conf"
+cd /d "%SCRIPT_DIR%"
 timeout /t 2 /nobreak >nul
 
 echo [5/6] Starting Ngrok...
