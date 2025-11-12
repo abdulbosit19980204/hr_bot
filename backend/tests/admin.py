@@ -221,7 +221,7 @@ class TestAdmin(admin.ModelAdmin):
                 result.total_questions,
                 f"{result.score}%",
                 "O'tdi" if result.is_passed else "O'tmadi",
-                result.completed_at.strftime('%Y-%m-%d %H:%M:%S')
+                result.completed_at.strftime('%Y-%m-%d %H:%M:%S') if result.completed_at else ''
             ]
             ws.append(row)
         
@@ -304,19 +304,24 @@ class TestResultAdmin(admin.ModelAdmin):
         ws.append(headers)
         
         for result in queryset:
+            # Handle position - convert to string safely
+            position_name = ''
+            if result.user.position:
+                position_name = str(result.user.position.name) if hasattr(result.user.position, 'name') else str(result.user.position)
+            
             row = [
                 result.id,
                 f"{result.user.first_name} {result.user.last_name}".strip() or result.user.username,
                 result.user.email or '',
                 result.user.phone or '',
-                result.user.position or '',
+                position_name,
                 result.test.title,
                 result.score,
                 result.correct_answers,
                 result.total_questions,
                 f"{result.score}%",
                 "O'tdi" if result.is_passed else "O'tmadi",
-                result.completed_at.strftime('%Y-%m-%d %H:%M:%S')
+                result.completed_at.strftime('%Y-%m-%d %H:%M:%S') if result.completed_at else ''
             ]
             ws.append(row)
         
@@ -335,19 +340,24 @@ class TestResultAdmin(admin.ModelAdmin):
                         'Ball', 'To\'g\'ri javoblar', 'Jami savollar', 'Foiz', 'Holat', 'Sana'])
         
         for result in queryset:
+            # Handle position - convert to string safely
+            position_name = ''
+            if result.user.position:
+                position_name = str(result.user.position.name) if hasattr(result.user.position, 'name') else str(result.user.position)
+            
             writer.writerow([
                 result.id,
                 f"{result.user.first_name} {result.user.last_name}".strip() or result.user.username,
                 result.user.email or '',
                 result.user.phone or '',
-                result.user.position or '',
+                position_name,
                 result.test.title,
                 result.score,
                 result.correct_answers,
                 result.total_questions,
                 f"{result.score}%",
                 "O'tdi" if result.is_passed else "O'tmadi",
-                result.completed_at.strftime('%Y-%m-%d %H:%M:%S')
+                result.completed_at.strftime('%Y-%m-%d %H:%M:%S') if result.completed_at else ''
             ])
         
         return response
