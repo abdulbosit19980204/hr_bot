@@ -9,13 +9,48 @@ REM Get the script directory
 set SCRIPT_DIR=%~dp0
 cd /d "%SCRIPT_DIR%"
 
-REM Check if Python is available
+REM Check if Python is available (try multiple ways)
+set PYTHON_CMD=
 python --version >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] Python not found! Please install Python 3.11+
-    pause
-    exit /b 1
+if not errorlevel 1 (
+    set PYTHON_CMD=python
+) else (
+    py --version >nul 2>&1
+    if not errorlevel 1 (
+        set PYTHON_CMD=py
+    ) else (
+        python3 --version >nul 2>&1
+        if not errorlevel 1 (
+            set PYTHON_CMD=python3
+        ) else (
+            echo [ERROR] Python not found! Please install Python 3.11+
+            echo Trying to find Python in common locations...
+            if exist "C:\Python311\python.exe" (
+                set PYTHON_CMD=C:\Python311\python.exe
+                echo [INFO] Found Python at C:\Python311\python.exe
+            ) else if exist "C:\Python312\python.exe" (
+                set PYTHON_CMD=C:\Python312\python.exe
+                echo [INFO] Found Python at C:\Python312\python.exe
+            ) else if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" (
+                set PYTHON_CMD=%LOCALAPPDATA%\Programs\Python\Python311\python.exe
+                echo [INFO] Found Python at %LOCALAPPDATA%\Programs\Python\Python311\python.exe
+            ) else if exist "%SCRIPT_DIR%backend\venv\Scripts\python.exe" (
+                set PYTHON_CMD=%SCRIPT_DIR%backend\venv\Scripts\python.exe
+                echo [INFO] Found Python in backend venv
+            ) else if exist "%SCRIPT_DIR%telegram_bot\venv\Scripts\python.exe" (
+                set PYTHON_CMD=%SCRIPT_DIR%telegram_bot\venv\Scripts\python.exe
+                echo [INFO] Found Python in telegram_bot venv
+            ) else (
+                echo [ERROR] Python not found in common locations!
+                echo Please add Python to PATH or install Python 3.11+
+                echo Or create a virtual environment in backend/venv
+                pause
+                exit /b 1
+            )
+        )
+    )
 )
+echo [INFO] Using Python: %PYTHON_CMD%
 
 REM Check if Node.js is available
 node --version >nul 2>&1
@@ -46,14 +81,14 @@ if errorlevel 1 (
 echo [1/6] Collecting static files...
 cd backend
 if not exist staticfiles mkdir staticfiles
-python manage.py collectstatic --noinput >nul 2>&1
+%PYTHON_CMD% manage.py collectstatic --noinput >nul 2>&1
 if errorlevel 1 (
     echo [WARNING] Failed to collect static files, continuing...
 )
 cd ..
 
 echo [2/6] Starting Backend (port 8000)...
-start "HR Bot - Backend" /MIN cmd /k "cd /d %SCRIPT_DIR%backend && python manage.py runserver 0.0.0.0:8000"
+start "HR Bot - Backend" /MIN cmd /k "cd /d %SCRIPT_DIR%backend && %PYTHON_CMD% manage.py runserver 0.0.0.0:8000"
 timeout /t 3 /nobreak >nul
 
 echo [3/6] Starting WebApp (port 5173)...
