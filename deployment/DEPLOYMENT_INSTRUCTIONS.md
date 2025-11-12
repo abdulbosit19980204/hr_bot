@@ -103,7 +103,7 @@ Quyidagilarni to'ldiring:
 ```env
 DEBUG=False
 SECRET_KEY=<Django secret key (deploy.sh tomonidan yaratilgan)>
-ALLOWED_HOSTS=178.218.200.120,localhost,127.0.0.1
+ALLOWED_HOSTS=178.218.200.120,localhost,127.0.0.1,unfunereal-matilda-frenular.ngrok-free.dev
 USE_POSTGRES=True
 DB_NAME=hr_bot_db
 DB_USER=hr_bot_user
@@ -111,8 +111,8 @@ DB_PASSWORD=KuchliParol123!
 DB_HOST=localhost
 DB_PORT=5432
 TELEGRAM_BOT_TOKEN=<BotFather'dan olingan token>
-TELEGRAM_WEBAPP_URL=http://178.218.200.120:8523/webapp
-CORS_ALLOWED_ORIGINS=http://178.218.200.120:8523,https://178.218.200.120:8523
+TELEGRAM_WEBAPP_URL=https://unfunereal-matilda-frenular.ngrok-free.dev/webapp
+CORS_ALLOWED_ORIGINS=https://unfunereal-matilda-frenular.ngrok-free.dev,http://178.218.200.120:8523
 ```
 
 #### Telegram Bot `.env` faylini tahrirlash:
@@ -126,7 +126,7 @@ Quyidagilarni to'ldiring:
 ```env
 TELEGRAM_BOT_TOKEN=<BotFather'dan olingan token>
 API_BASE_URL=http://127.0.0.1:8000/api
-TELEGRAM_WEBAPP_URL=http://178.218.200.120:8523/webapp
+TELEGRAM_WEBAPP_URL=https://unfunereal-matilda-frenular.ngrok-free.dev/webapp
 ADMIN_CHAT_ID=<Admin Telegram Chat ID>
 REDIS_HOST=localhost
 REDIS_PORT=6379
@@ -135,7 +135,90 @@ REDIS_DB=0
 
 **Eslatma:** Agar Redis ishlatmasangiz, telegram bot MemoryStorage ishlatadi.
 
-### 6. Django Superuser yaratish
+#### WebApp `.env` faylini tahrirlash (agar kerak bo'lsa):
+
+```bash
+nano /home/e-catalog/hr_bot/webapp/.env
+```
+
+Quyidagilarni to'ldiring:
+
+```env
+# Backend API Base URL (ngrok orqali)
+VITE_API_BASE_URL=https://unfunereal-matilda-frenular.ngrok-free.dev/api
+```
+
+**Eslatma:** WebApp build qilinganda, bu environment variable build'ga kiritiladi. Agar o'zgarish kiritilsa, qayta build qilish kerak.
+
+### 6. Ngrok sozlash (ixtiyoriy - agar webapp'ni ngrok orqali serve qilmoqchi bo'lsangiz)
+
+Agar webapp'ni ngrok orqali HTTPS'da ishga tushirmoqchi bo'lsangiz:
+
+1. **Ngrok o'rnatish:**
+```bash
+# Ngrok'ni yuklab olish
+curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+sudo apt update && sudo apt install ngrok
+
+# Yoki manual yuklab olish
+wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
+tar -xzf ngrok-v3-stable-linux-amd64.tgz
+sudo mv ngrok /usr/local/bin/
+```
+
+2. **Ngrok authtoken sozlash:**
+```bash
+ngrok config add-authtoken YOUR_NGROK_AUTHTOKEN
+```
+
+3. **Ngrok tunnel ishga tushirish:**
+```bash
+# WebApp uchun (port 5173 yoki build qilingan fayllar uchun)
+ngrok http 5173
+
+# Yoki backend API uchun (port 8000)
+ngrok http 8000
+
+# Yoki ikkalasini ham (2 ta terminal'da)
+```
+
+4. **Ngrok URL'ni olish:**
+Ngrok ishga tushgandan keyin, terminal'da ko'rsatilgan URL'ni oling (masalan: `https://unfunereal-matilda-frenular.ngrok-free.dev`)
+
+5. **Ngrok'ni systemd service sifatida ishga tushirish (ixtiyoriy):**
+
+```bash
+sudo nano /etc/systemd/system/ngrok.service
+```
+
+Quyidagilarni qo'shing:
+
+```ini
+[Unit]
+Description=Ngrok tunnel
+After=network.target
+
+[Service]
+Type=simple
+User=e-catalog
+ExecStart=/usr/local/bin/ngrok http 5173
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Keyin:
+```bash
+sudo systemctl enable ngrok
+sudo systemctl start ngrok
+```
+
+**Muhim:** Ngrok free tier'da URL har safar o'zgaradi. Agar doimiy URL kerak bo'lsa, ngrok paid plan yoki boshqa tunnel xizmatidan foydalaning.
+
+### 7. Django Superuser yaratish
 
 ```bash
 cd /home/e-catalog/hr_bot/backend
@@ -143,7 +226,7 @@ source venv/bin/activate
 python manage.py createsuperuser
 ```
 
-### 7. Services'larni ishga tushirish
+### 8. Services'larni ishga tushirish
 
 ```bash
 # Backend service'ni ishga tushirish
@@ -156,7 +239,7 @@ sudo systemctl start hr-bot-telegram
 sudo systemctl reload nginx
 ```
 
-### 8. Services'larni tekshirish
+### 9. Services'larni tekshirish
 
 ```bash
 # Backend status
@@ -265,11 +348,16 @@ sudo systemctl reload nginx
 
 ## 🌐 URL'lar
 
+### Production Server:
 - **API:** http://178.218.200.120:8523/api/
 - **Admin Panel:** http://178.218.200.120:8523/admin/
 - **WebApp:** http://178.218.200.120:8523/webapp/
 - **Dashboard:** http://178.218.200.120:8523/dashboard/
 - **Health Check:** http://178.218.200.120:8523/health/
+
+### Ngrok HTTPS (Agar sozlangan bo'lsa):
+- **WebApp:** https://unfunereal-matilda-frenular.ngrok-free.dev/webapp
+- **API:** https://unfunereal-matilda-frenular.ngrok-free.dev/api (agar backend ham ngrok orqali serve qilingan bo'lsa)
 
 ## 🔒 Xavfsizlik
 

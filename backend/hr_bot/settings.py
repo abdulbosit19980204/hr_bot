@@ -22,7 +22,7 @@ SECRET_KEY = env('SECRET_KEY', default='django-insecure-change-this-in-productio
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG', default=True)
 
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1', '0.0.0.0'])
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1', '0.0.0.0','unfunereal-matilda-frenular.ngrok-free.dev'])
 
 # Application definition
 INSTALLED_APPS = [
@@ -170,13 +170,15 @@ else:
             'http://localhost:5173',
             'http://127.0.0.1:3000',
             'http://127.0.0.1:5173',
+            'https://unfunereal-matilda-frenular.ngrok-free.dev',
+            'http://178.218.200.120:8523',
         ]
     )
     CORS_ALLOW_CREDENTIALS = True
 
 # Telegram Bot settings
 TELEGRAM_BOT_TOKEN = env('TELEGRAM_BOT_TOKEN', default='')
-TELEGRAM_WEBAPP_URL = env('TELEGRAM_WEBAPP_URL', default='https://yourdomain.com/webapp')
+TELEGRAM_WEBAPP_URL = env('TELEGRAM_WEBAPP_URL', default='https://unfunereal-matilda-frenular.ngrok-free.dev/webapp')
 
 # File upload settings
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10485760  # 10MB

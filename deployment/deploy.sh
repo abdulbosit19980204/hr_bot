@@ -99,8 +99,8 @@ DB_PASSWORD=CHANGE_THIS_PASSWORD
 DB_HOST=localhost
 DB_PORT=5432
 TELEGRAM_BOT_TOKEN=YOUR_BOT_TOKEN_HERE
-TELEGRAM_WEBAPP_URL=http://178.218.200.120:8523/webapp
-CORS_ALLOWED_ORIGINS=http://178.218.200.120:8523,https://178.218.200.120:8523
+TELEGRAM_WEBAPP_URL=https://unfunereal-matilda-frenular.ngrok-free.dev/webapp
+CORS_ALLOWED_ORIGINS=https://unfunereal-matilda-frenular.ngrok-free.dev,http://178.218.200.120:8523
 EOF
     echo -e "${RED}⚠️  IMPORTANT: Edit $BACKEND_DIR/.env and set correct values!${NC}"
 else
@@ -137,7 +137,7 @@ if [ ! -f ".env" ]; then
     cat > .env << EOF
 TELEGRAM_BOT_TOKEN=YOUR_BOT_TOKEN_HERE
 API_BASE_URL=http://127.0.0.1:8000/api
-TELEGRAM_WEBAPP_URL=http://178.218.200.120:8523/webapp
+TELEGRAM_WEBAPP_URL=https://unfunereal-matilda-frenular.ngrok-free.dev/webapp
 ADMIN_CHAT_ID=YOUR_ADMIN_CHAT_ID
 REDIS_HOST=localhost
 REDIS_PORT=6379

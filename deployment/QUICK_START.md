@@ -78,6 +78,7 @@ sudo journalctl -u hr-bot-telegram -f
 - **Production:** http://178.218.200.120:8523
 - **API:** http://178.218.200.120:8523/api/
 - **Admin:** http://178.218.200.120:8523/admin/
+- **Ngrok WebApp (HTTPS):** https://unfunereal-matilda-frenular.ngrok-free.dev/webapp
 
 ---
 
