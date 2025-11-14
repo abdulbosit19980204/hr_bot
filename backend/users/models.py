@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
+from ckeditor.fields import RichTextField
 
 
 class Position(models.Model):
@@ -62,6 +63,31 @@ class TelegramProfile(models.Model):
 
     def __str__(self):
         return f"{self.telegram_first_name} {self.telegram_last_name}" if self.telegram_first_name or self.telegram_last_name else f"Telegram User {self.telegram_id}"
+
+
+class Notification(models.Model):
+    """Notification model - Telegram orqali yuboriladigan xabarlar"""
+    title = models.CharField(max_length=255, verbose_name=_('Title'), help_text=_('Xabar sarlavhasi'))
+    message = RichTextField(verbose_name=_('Message'), help_text=_('Xabar matni (HTML formatida)'))
+    recipients = models.ManyToManyField(User, verbose_name=_('Recipients'), help_text=_('Xabarni oladigan foydalanuvchilar'), blank=True)
+    send_to_all = models.BooleanField(default=False, verbose_name=_('Send to All'), help_text=_('Barcha bot a\'zolariga yuborish'))
+    sent_at = models.DateTimeField(null=True, blank=True, verbose_name=_('Sent At'), help_text=_('Xabar yuborilgan vaqt'))
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='notifications_created', verbose_name=_('Created By'))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Created at'))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_('Updated at'))
+    
+    # Statistics
+    total_recipients = models.IntegerField(default=0, verbose_name=_('Total Recipients'), help_text=_('Jami yuborilgan foydalanuvchilar soni'))
+    successful_sends = models.IntegerField(default=0, verbose_name=_('Successful Sends'), help_text=_('Muvaffaqiyatli yuborilgan'))
+    failed_sends = models.IntegerField(default=0, verbose_name=_('Failed Sends'), help_text=_('Xatolik bilan yuborilgan'))
+
+    class Meta:
+        verbose_name = _('Notification')
+        verbose_name_plural = _('Notifications')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.title} - {self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else 'Draft'}"
 
 
 class CV(models.Model):

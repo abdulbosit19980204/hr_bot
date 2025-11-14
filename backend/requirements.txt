@@ -28,3 +28,6 @@ cryptography==41.0.7
 
 # Production Server
 gunicorn==21.2.0
+
+# Rich Text Editor
+django-ckeditor==6.7.0
