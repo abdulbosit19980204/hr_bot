@@ -22,7 +22,7 @@ SECRET_KEY = env('SECRET_KEY', default='django-insecure-change-this-in-productio
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG', default=True)
 
-ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1', '0.0.0.0','unfunereal-matilda-frenular.ngrok-free.dev'])
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1', '0.0.0.0','unfunereal-matilda-frenular.ngrok-free.dev','192.168.0.110','192.168.0.111','192.168.0.101','192.168.0.111'])
 
 # Application definition
 INSTALLED_APPS = [
