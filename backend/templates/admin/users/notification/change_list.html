@@ -1,0 +1,12 @@
+{% extends "admin/change_list.html" %}
+{% load i18n admin_urls static %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    <li>
+        <a href="{% url 'admin:users_notification_send_test' %}" class="addlink" style="background: #417690; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px;">
+            🧪 Test xabarini yuborish
+        </a>
+    </li>
+{% endblock %}
+

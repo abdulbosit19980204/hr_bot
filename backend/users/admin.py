@@ -125,6 +125,11 @@ class NotificationAdmin(admin.ModelAdmin):
     list_display = ['title', 'send_to_all_display', 'recipients_count', 'status_display', 'statistics_display', 'errors_count_display', 'created_at', 'created_by']
     list_filter = ['send_to_all', 'sent_at', 'created_at']
     search_fields = ['title', 'message']
+    
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['test_notification_url'] = reverse('admin:users_notification_send_test')
+        return super().changelist_view(request, extra_context)
     readonly_fields = ['sent_at', 'created_at', 'updated_at', 'total_recipients', 'successful_sends', 'failed_sends', 'statistics_display', 'errors_link']
     filter_horizontal = ['recipients']
     fieldsets = (
