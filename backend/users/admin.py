@@ -5,11 +5,13 @@ from django.utils import timezone
 from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.urls import reverse, path
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
+from django import forms
 import asyncio
 import logging
 from .models import User, CV, Position, TelegramProfile, Notification, NotificationError
-from .services import send_notification_to_users
+from .services import send_notification_to_users, send_telegram_message_async
+from tests.models import Test, TestResult
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +94,32 @@ class NotificationErrorAdmin(admin.ModelAdmin):
         return True  # Xatoliklarni o'chirish mumkin
 
 
+class TestNotificationForm(forms.Form):
+    """Form for sending test notification to a single user"""
+    user = forms.ModelChoiceField(
+        queryset=User.objects.filter(telegram_id__isnull=False, notification_enabled=True, is_active=True).exclude(telegram_id=0),
+        label='Foydalanuvchi',
+        help_text='Xabarni oladigan foydalanuvchi'
+    )
+    test = forms.ModelChoiceField(
+        queryset=Test.objects.filter(is_active=True),
+        label='Test',
+        help_text='Qaysi test haqida xabar yuboriladi'
+    )
+    include_result = forms.BooleanField(
+        required=False,
+        initial=True,
+        label='Test natijasini qo\'shish',
+        help_text='Agar foydalanuvchi bu testni ishlagan bo\'lsa, natijani xabarga qo\'shish'
+    )
+    custom_message = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={'rows': 4}),
+        label='Qo\'shimcha xabar',
+        help_text='Xabarga qo\'shiladigan qo\'shimcha matn (ixtiyoriy)'
+    )
+
+
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
     list_display = ['title', 'send_to_all_display', 'recipients_count', 'status_display', 'statistics_display', 'errors_count_display', 'created_at', 'created_by']
@@ -125,8 +153,102 @@ class NotificationAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.send_notification),
                 name='users_notification_send',
             ),
+            path(
+                'send-test-notification/',
+                self.admin_site.admin_view(self.send_test_notification),
+                name='users_notification_send_test',
+            ),
         ]
         return custom_urls + urls
+    
+    def send_test_notification(self, request):
+        """Send test notification to a single user"""
+        if request.method == 'POST':
+            form = TestNotificationForm(request.POST)
+            if form.is_valid():
+                user = form.cleaned_data['user']
+                test = form.cleaned_data['test']
+                include_result = form.cleaned_data['include_result']
+                custom_message = form.cleaned_data.get('custom_message', '').strip()
+                
+                # Build message
+                message_parts = []
+                message_parts.append(f"📝 <b>Test haqida xabar</b>\n\n")
+                message_parts.append(f"🧪 <b>Test:</b> {test.title}\n")
+                
+                if test.description:
+                    message_parts.append(f"📄 <b>Tavsif:</b> {test.description[:200]}\n\n")
+                
+                # Get test result if requested
+                if include_result:
+                    latest_result = TestResult.objects.filter(
+                        user=user,
+                        test=test,
+                        is_completed=True
+                    ).order_by('-completed_at').first()
+                    
+                    if latest_result:
+                        status_emoji = "✅" if latest_result.score >= test.passing_score else "❌"
+                        status_text = "O'tdi" if latest_result.score >= test.passing_score else "O'tmadi"
+                        minutes = latest_result.time_taken // 60
+                        seconds = latest_result.time_taken % 60
+                        time_str = f"{minutes} daqiqa {seconds} soniya" if minutes > 0 else f"{seconds} soniya"
+                        
+                        message_parts.append(f"📊 <b>Test natijasi:</b>\n")
+                        message_parts.append(f"{status_emoji} <b>Holat:</b> {status_text}\n")
+                        message_parts.append(f"📈 <b>Ball:</b> {latest_result.score}%\n")
+                        message_parts.append(f"✅ <b>To'g'ri javoblar:</b> {latest_result.correct_answers}/{latest_result.total_questions}\n")
+                        message_parts.append(f"⏱️ <b>Vaqt:</b> {time_str}\n")
+                        if latest_result.completed_at:
+                            message_parts.append(f"📅 <b>Yakunlangan:</b> {latest_result.completed_at.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                        message_parts.append("\n")
+                    else:
+                        message_parts.append(f"ℹ️ Siz hali bu testni ishlamagansiz.\n\n")
+                
+                # Add custom message
+                if custom_message:
+                    message_parts.append(f"{custom_message}\n")
+                
+                telegram_message = "".join(message_parts)
+                
+                # Send message
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    result = loop.run_until_complete(send_telegram_message_async(user.telegram_id, telegram_message))
+                    loop.close()
+                    
+                    if result:
+                        messages.success(
+                            request,
+                            f"✅ Test xabari muvaffaqiyatli yuborildi!\n"
+                            f"👤 Foydalanuvchi: {user.first_name} {user.last_name}\n"
+                            f"🧪 Test: {test.title}"
+                        )
+                    else:
+                        messages.error(
+                            request,
+                            f"❌ Xabar yuborishda xatolik yuz berdi.\n"
+                            f"Foydalanuvchi telegram_id: {user.telegram_id}"
+                        )
+                except Exception as e:
+                    logger.error(f"Error sending test notification: {e}", exc_info=True)
+                    messages.error(
+                        request,
+                        f"❌ Xatolik: {str(e)}"
+                    )
+                
+                return redirect('admin:users_notification_send_test')
+        else:
+            form = TestNotificationForm()
+        
+        context = {
+            'title': 'Test xabarini yuborish',
+            'form': form,
+            'opts': self.model._meta,
+            'has_view_permission': self.has_view_permission(request),
+        }
+        return render(request, 'admin/users/notification/send_test_notification.html', context)
     
     def send_notification(self, request, notification_id):
         """Send notification manually"""

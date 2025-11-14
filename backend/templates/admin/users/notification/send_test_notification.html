@@ -1,0 +1,155 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block title %}Test xabarini yuborish | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+&rsaquo; <a href="{% url 'admin:users_notification_changelist' %}">Notifications</a>
+&rsaquo; Test xabarini yuborish
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>🧪 Test xabarini yuborish</h1>
+
+<p>Bitta foydalanuvchiga test haqida xabar yuborish. Agar foydalanuvchi testni ishlagan bo'lsa, natijani ham ko'rsatish mumkin.</p>
+
+<form method="post" id="test-notification-form">
+    {% csrf_token %}
+    
+    <fieldset class="module aligned">
+        <h2>Xabar sozlamalari</h2>
+        
+        <div class="form-row">
+            <div>
+                <label for="{{ form.user.id_for_label }}">{{ form.user.label }}:</label>
+                {{ form.user }}
+                {% if form.user.help_text %}
+                    <p class="help">{{ form.user.help_text }}</p>
+                {% endif %}
+                {% if form.user.errors %}
+                    <ul class="errorlist">
+                        {% for error in form.user.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="form-row">
+            <div>
+                <label for="{{ form.test.id_for_label }}">{{ form.test.label }}:</label>
+                {{ form.test }}
+                {% if form.test.help_text %}
+                    <p class="help">{{ form.test.help_text }}</p>
+                {% endif %}
+                {% if form.test.errors %}
+                    <ul class="errorlist">
+                        {% for error in form.test.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="form-row">
+            <div>
+                <label for="{{ form.include_result.id_for_label }}">
+                    {{ form.include_result }}
+                    {{ form.include_result.label }}
+                </label>
+                {% if form.include_result.help_text %}
+                    <p class="help">{{ form.include_result.help_text }}</p>
+                {% endif %}
+                {% if form.include_result.errors %}
+                    <ul class="errorlist">
+                        {% for error in form.include_result.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="form-row">
+            <div>
+                <label for="{{ form.custom_message.id_for_label }}">{{ form.custom_message.label }}:</label>
+                {{ form.custom_message }}
+                {% if form.custom_message.help_text %}
+                    <p class="help">{{ form.custom_message.help_text }}</p>
+                {% endif %}
+                {% if form.custom_message.errors %}
+                    <ul class="errorlist">
+                        {% for error in form.custom_message.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+        </div>
+    </fieldset>
+    
+    <div class="submit-row">
+        <input type="submit" value="📤 Xabarni yuborish" class="default" name="send">
+        <a href="{% url 'admin:users_notification_changelist' %}" class="button">Bekor qilish</a>
+    </div>
+</form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('test-notification-form');
+    form.addEventListener('submit', function(e) {
+        const userSelect = document.getElementById('{{ form.user.id_for_label }}');
+        const testSelect = document.getElementById('{{ form.test.id_for_label }}');
+        
+        if (!userSelect.value || !testSelect.value) {
+            e.preventDefault();
+            alert('Iltimos, foydalanuvchi va testni tanlang!');
+            return false;
+        }
+        
+        const userText = userSelect.options[userSelect.selectedIndex].text;
+        const testText = testSelect.options[testSelect.selectedIndex].text;
+        
+        if (!confirm(`Xabarni "${userText}" foydalanuvchisiga "${testText}" testi haqida yuborishni tasdiqlaysizmi?`)) {
+            e.preventDefault();
+            return false;
+        }
+    });
+});
+</script>
+
+<style>
+.form-row {
+    margin-bottom: 15px;
+}
+.form-row label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+.form-row select,
+.form-row textarea {
+    width: 100%;
+    max-width: 500px;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+.form-row .help {
+    margin-top: 5px;
+    color: #666;
+    font-size: 12px;
+}
+.errorlist {
+    color: #ba2121;
+    margin-top: 5px;
+}
+</style>
+{% endblock %}
+
