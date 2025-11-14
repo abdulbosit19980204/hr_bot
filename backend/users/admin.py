@@ -385,8 +385,8 @@ class NotificationAdmin(admin.ModelAdmin):
             except Notification.DoesNotExist:
                 pass
         else:
-            # For new notifications, show send button after save
-            extra_context['show_send_button'] = False
+            # For new notifications, show send button after save (will be enabled after first save)
+            extra_context['show_send_button'] = True
         return super().changeform_view(request, object_id, form_url, extra_context)
     
     def get_readonly_fields(self, request, obj=None):

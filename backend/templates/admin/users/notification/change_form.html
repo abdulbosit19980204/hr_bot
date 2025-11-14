@@ -3,11 +3,11 @@
 
 {% block submit_buttons_bottom %}
 <div class="submit-row">
-    {% if show_send_button %}
+    {% if show_send_button and original.pk %}
         <a href="{% url 'admin:users_notification_send' original.pk %}" 
            class="button" 
            style="background: {% if is_resend %}#ba2121{% else %}#417690{% endif %}; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px; display: inline-block; margin-right: 10px;"
-           onclick="return confirm('{% if is_resend %}Xatoliklar bo\'lgan foydalanuvchilarga qayta yuborishni tasdiqlaysizmi?{% else %}Xabarni yuborishni tasdiqlaysizmi?{% endif %}');">
+           onclick="return confirm('{% if is_resend %}Xabarni qayta yuborishni tasdiqlaysizmi?{% else %}Xabarni yuborishni tasdiqlaysizmi?{% endif %}');">
             {% if is_resend %}🔄 Qayta Yuborish{% else %}📤 Xabarni Yuborish{% endif %}
         </a>
     {% endif %}
