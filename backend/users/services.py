@@ -24,7 +24,9 @@ def html_to_telegram_html(html_text):
     if not html_text:
         return ""
     
-    # Remove unsupported tags and convert to Telegram format
+    # First, handle line breaks properly
+    html_text = html_text.replace('<br>', '\n').replace('<br/>', '\n').replace('<br />', '\n')
+    
     # Replace <strong> and <b> with <b>
     html_text = re.sub(r'<(strong|b)>', '<b>', html_text, flags=re.IGNORECASE)
     html_text = re.sub(r'</(strong|b)>', '</b>', html_text, flags=re.IGNORECASE)
@@ -49,14 +51,28 @@ def html_to_telegram_html(html_text):
     html_text = re.sub(r'<pre>', '<pre>', html_text, flags=re.IGNORECASE)
     html_text = re.sub(r'</pre>', '</pre>', html_text, flags=re.IGNORECASE)
     
-    # Convert <a href="..."> to Telegram format
-    html_text = re.sub(r'<a\s+href=["\']([^"\']+)["\']>([^<]+)</a>', r'<a href="\1">\2</a>', html_text, flags=re.IGNORECASE)
+    # Convert <a href="..."> to Telegram format (must be exact format)
+    html_text = re.sub(r'<a\s+href=["\']([^"\']+)["\']\s*>([^<]+)</a>', r'<a href="\1">\2</a>', html_text, flags=re.IGNORECASE)
     
-    # Remove unsupported tags (like <p>, <div>, <br>, etc.) but keep their content
-    html_text = re.sub(r'</?(p|div|span|br|h[1-6]|ul|ol|li)[^>]*>', '\n', html_text, flags=re.IGNORECASE)
+    # Convert list items to bullet points
+    html_text = re.sub(r'<li[^>]*>', '• ', html_text, flags=re.IGNORECASE)
+    html_text = re.sub(r'</li>', '\n', html_text, flags=re.IGNORECASE)
     
-    # Clean up multiple newlines
+    # Remove unsupported tags but keep their content
+    # Remove opening and closing tags for p, div, span, h1-h6, ul, ol
+    html_text = re.sub(r'</?(p|div|span|h[1-6]|ul|ol)[^>]*>', '\n', html_text, flags=re.IGNORECASE)
+    
+    # Clean up multiple newlines (but keep double newlines for paragraphs)
     html_text = re.sub(r'\n{3,}', '\n\n', html_text)
+    
+    # Escape special HTML characters that Telegram might interpret incorrectly
+    # But keep our Telegram HTML tags
+    html_text = html_text.replace('&nbsp;', ' ')
+    html_text = html_text.replace('&amp;', '&')
+    html_text = html_text.replace('&lt;', '<')
+    html_text = html_text.replace('&gt;', '>')
+    html_text = html_text.replace('&quot;', '"')
+    html_text = html_text.replace('&#39;', "'")
     
     return html_text.strip()
 
@@ -91,14 +107,31 @@ async def send_telegram_message_async(telegram_id, message_text, parse_mode='HTM
                 if response.status == 200:
                     result = await response.json()
                     if result.get('ok'):
-                        logger.info(f"Message sent successfully to telegram_id: {telegram_id}")
+                        logger.info(f"✅ Message sent successfully to telegram_id: {telegram_id}")
                         return True
                     else:
-                        logger.error(f"Telegram API error: {result.get('description', 'Unknown error')}")
+                        error_desc = result.get('description', 'Unknown error')
+                        logger.error(f"❌ Telegram API error for telegram_id {telegram_id}: {error_desc}")
+                        # If HTML parse error, try sending as plain text
+                        if 'parse' in error_desc.lower() or 'html' in error_desc.lower():
+                            logger.info(f"🔄 Retrying as plain text for telegram_id: {telegram_id}")
+                            # Remove HTML tags and retry
+                            plain_text = re.sub(r'<[^>]+>', '', message_text)
+                            plain_payload = {
+                                'chat_id': telegram_id,
+                                'text': plain_text[:4000] if len(plain_text) > 4000 else plain_text,
+                                'parse_mode': None
+                            }
+                            async with session.post(url, json=plain_payload, timeout=aiohttp.ClientTimeout(total=10)) as retry_response:
+                                if retry_response.status == 200:
+                                    retry_result = await retry_response.json()
+                                    if retry_result.get('ok'):
+                                        logger.info(f"✅ Message sent as plain text to telegram_id: {telegram_id}")
+                                        return True
                         return False
                 else:
                     error_text = await response.text()
-                    logger.error(f"HTTP {response.status} error sending message: {error_text}")
+                    logger.error(f"❌ HTTP {response.status} error sending message to telegram_id {telegram_id}: {error_text}")
                     return False
     except asyncio.TimeoutError:
         logger.error(f"Timeout sending message to telegram_id: {telegram_id}")
