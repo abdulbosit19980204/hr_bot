@@ -303,22 +303,65 @@ class TestTaking(StatesGroup):
 
 async def get_or_create_user(telegram_id: int, first_name: str, last_name: str = None, telegram_username: str = None, language_code: str = None, is_premium: bool = False):
     """Get or create user via API with Telegram info"""
-    async with aiohttp.ClientSession() as session:
-        # Try to authenticate/get user by telegram_id (POST request)
-        async with session.post(
-            f"{API_BASE_URL}/users/telegram_auth/",
-            json={
-                'telegram_id': telegram_id,
-                'first_name': first_name,
-                'last_name': last_name or '',
-                'telegram_username': telegram_username,
-                'telegram_language_code': language_code,
-                'telegram_is_premium': is_premium
-            }
-        ) as resp:
-            if resp.status in [200, 201]:
-                data = await resp.json()
-                return data.get('user')
+    max_retries = 3
+    retry_delay = 1  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            timeout = aiohttp.ClientTimeout(total=10, connect=5)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                # Try to authenticate/get user by telegram_id (POST request)
+                try:
+                    async with session.post(
+                        f"{API_BASE_URL}/users/telegram_auth/",
+                        json={
+                            'telegram_id': telegram_id,
+                            'first_name': first_name,
+                            'last_name': last_name or '',
+                            'telegram_username': telegram_username,
+                            'telegram_language_code': language_code,
+                            'telegram_is_premium': is_premium
+                        }
+                    ) as resp:
+                        if resp.status in [200, 201]:
+                            data = await resp.json()
+                            return data.get('user')
+                        else:
+                            logger.warning(f"API returned status {resp.status} for telegram_id {telegram_id}")
+                except aiohttp.ClientConnectorError as e:
+                    logger.error(f"❌ Cannot connect to backend API (attempt {attempt + 1}/{max_retries}): {e}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    else:
+                        logger.error(f"❌ Failed to connect to backend API after {max_retries} attempts")
+                        return None
+                except aiohttp.ClientOSError as e:
+                    logger.error(f"❌ Network error connecting to backend API (attempt {attempt + 1}/{max_retries}): {e}")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    else:
+                        logger.error(f"❌ Network error after {max_retries} attempts")
+                        return None
+                except asyncio.TimeoutError:
+                    logger.error(f"❌ Timeout connecting to backend API (attempt {attempt + 1}/{max_retries})")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    else:
+                        logger.error(f"❌ Timeout after {max_retries} attempts")
+                        return None
+                except Exception as e:
+                    logger.error(f"❌ Unexpected error connecting to backend API: {e}", exc_info=True)
+                    return None
+        except Exception as e:
+            logger.error(f"❌ Error in get_or_create_user: {e}", exc_info=True)
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+                continue
+            else:
+                return None
     
     return None
 
@@ -1543,7 +1586,17 @@ async def menu_profile_info(message: types.Message):
 async def menu_trial(message: types.Message):
     """Show trial tests menu"""
     user = message.from_user
-    user_data = await get_or_create_user(user.id, user.first_name, user.last_name)
+    try:
+        user_data = await get_or_create_user(user.id, user.first_name, user.last_name)
+    except Exception as e:
+        logger.error(f"Error in menu_trial getting user: {e}", exc_info=True)
+        await message.answer(
+            "⚠️ <b>Xatolik yuz berdi</b>\n\n"
+            "Backend server bilan aloqa o'rnatishda muammo yuz berdi.\n"
+            "Iltimos, keyinroq qayta urinib ko'ring.",
+            parse_mode="HTML"
+        )
+        return
     
     if not user_data or not user_data.get('position'):
         await message.answer("⚠️ Profilingiz to'liq emas")
