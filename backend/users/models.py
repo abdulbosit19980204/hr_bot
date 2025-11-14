@@ -90,6 +90,28 @@ class Notification(models.Model):
         return f"{self.title} - {self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else 'Draft'}"
 
 
+class NotificationError(models.Model):
+    """Notification xatoliklari - qaysi foydalanuvchiga yuborilgan va qanday xatolik yuz bergan"""
+    notification = models.ForeignKey(Notification, on_delete=models.CASCADE, related_name='errors', verbose_name=_('Notification'))
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notification_errors', verbose_name=_('User'))
+    telegram_id = models.BigIntegerField(verbose_name=_('Telegram ID'), help_text=_('Foydalanuvchi Telegram ID'))
+    error_message = models.TextField(verbose_name=_('Error Message'), help_text=_('Xatolik xabari'))
+    error_type = models.CharField(max_length=100, blank=True, null=True, verbose_name=_('Error Type'), help_text=_('Xatolik turi'))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_('Created at'))
+
+    class Meta:
+        verbose_name = _('Notification Error')
+        verbose_name_plural = _('Notification Errors')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['notification', 'created_at']),
+            models.Index(fields=['user', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.notification.title} - {self.user} - {self.created_at.strftime('%Y-%m-%d %H:%M:%S')}"
+
+
 class CV(models.Model):
     """CV file model"""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='cvs', verbose_name=_('User'))

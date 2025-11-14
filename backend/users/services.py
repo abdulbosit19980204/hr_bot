@@ -152,16 +152,38 @@ async def send_notification_to_users(notification):
         telegram_message = f"<b>{notification.title}</b>\n\n{telegram_message}"
     
     # Send messages
+    from .models import NotificationError
+    
     for user in recipients:
         try:
             result = await send_telegram_message_async(user.telegram_id, telegram_message)
             if result:
                 successful += 1
             else:
+                # Save error if send failed
                 failed += 1
+                error_type = "Send Failed"
+                error_message = "Xabar yuborish muvaffaqiyatsiz tugadi (Telegram API False qaytardi)"
+                NotificationError.objects.create(
+                    notification=notification,
+                    user=user,
+                    telegram_id=user.telegram_id,
+                    error_message=error_message,
+                    error_type=error_type
+                )
         except Exception as e:
             logger.error(f"Error sending notification to user {user.id}: {e}", exc_info=True)
             failed += 1
+            # Save error details
+            error_type = type(e).__name__
+            error_message = str(e)
+            NotificationError.objects.create(
+                notification=notification,
+                user=user,
+                telegram_id=user.telegram_id,
+                error_message=error_message,
+                error_type=error_type
+            )
     
     # Update notification statistics
     notification.total_recipients = total_recipients
@@ -171,6 +193,7 @@ async def send_notification_to_users(notification):
     return {
         'total': total_recipients,
         'successful': successful,
-        'failed': failed
+        'failed': failed,
+        'errors': NotificationError.objects.filter(notification=notification).count()
     }
 
