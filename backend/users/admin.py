@@ -259,12 +259,7 @@ class NotificationAdmin(admin.ModelAdmin):
         """Send notification manually"""
         notification = get_object_or_404(Notification, pk=notification_id)
         
-        # Allow resending if there were errors
-        has_errors = notification.errors.exists() if notification.sent_at else False
-        if notification.sent_at and not has_errors:
-            messages.warning(request, "Bu xabar allaqachon yuborilgan va xatoliklar yo'q!")
-            return redirect('admin:users_notification_change', notification_id)
-        
+        # Always allow sending (resending is allowed)
         try:
             # Run async function in sync context
             loop = asyncio.new_event_loop()
@@ -272,15 +267,10 @@ class NotificationAdmin(admin.ModelAdmin):
             result = loop.run_until_complete(send_notification_to_users(notification))
             loop.close()
             
-            # Update sent_at (only if first time sending, or if resending after errors)
-            if not notification.sent_at:
-                notification.sent_at = timezone.now()
-            # Reset statistics if resending
-            if has_errors:
-                # Delete old errors before resending
-                notification.errors.all().delete()
-                notification.successful_sends = 0
-                notification.failed_sends = 0
+            # Update sent_at (always update to latest send time)
+            notification.sent_at = timezone.now()
+            # Don't reset statistics - accumulate them
+            # Don't delete old errors - keep them for history
             notification.save(update_fields=['sent_at', 'total_recipients', 'successful_sends', 'failed_sends'])
             
             messages.success(
@@ -388,25 +378,21 @@ class NotificationAdmin(admin.ModelAdmin):
         if object_id:
             try:
                 notification = Notification.objects.get(pk=object_id)
-                has_errors = notification.errors.exists() if notification.sent_at else False
-                # Show send button if not sent, or if sent but has errors (for resending)
-                if not notification.sent_at or has_errors:
-                    extra_context['show_send_button'] = True
-                    if notification.sent_at and has_errors:
-                        extra_context['is_resend'] = True
+                # Always show send button (for resending)
+                extra_context['show_send_button'] = True
+                if notification.sent_at:
+                    extra_context['is_resend'] = True
             except Notification.DoesNotExist:
                 pass
+        else:
+            # For new notifications, show send button after save
+            extra_context['show_send_button'] = False
         return super().changeform_view(request, object_id, form_url, extra_context)
     
     def get_readonly_fields(self, request, obj=None):
         readonly = list(super().get_readonly_fields(request, obj))
-        if obj and obj.sent_at:
-            # If sent but has errors, allow editing for resending
-            has_errors = obj.errors.exists()
-            if not has_errors:
-                # If no errors, make all fields readonly
-                readonly.extend(['title', 'message', 'send_to_all', 'recipients'])
-            # If has errors, allow editing (fields remain editable)
+        # Always allow editing - notification can be resent anytime
+        # Don't make fields readonly even if sent
         return readonly
     
     class Media:
