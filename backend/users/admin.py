@@ -64,8 +64,17 @@ class NotificationErrorAdmin(admin.ModelAdmin):
     list_display = ['notification', 'user', 'telegram_id', 'error_type', 'error_message_short', 'created_at']
     list_filter = ['error_type', 'created_at', 'notification']
     search_fields = ['notification__title', 'user__username', 'user__first_name', 'user__last_name', 'telegram_id', 'error_message']
-    readonly_fields = ['notification', 'user', 'telegram_id', 'error_message', 'error_type', 'created_at']
+    readonly_fields = ['notification', 'user', 'telegram_id', 'created_at']
     raw_id_fields = ['notification', 'user']
+    fieldsets = (
+        ('Asosiy Ma\'lumotlar', {
+            'fields': ('notification', 'user', 'telegram_id', 'created_at')
+        }),
+        ('Xatolik Ma\'lumotlari', {
+            'fields': ('error_type', 'error_message'),
+            'description': 'Xatolik turi va xabarini tahrirlashingiz mumkin'
+        }),
+    )
     
     def error_message_short(self, obj):
         if len(obj.error_message) > 100:
@@ -75,6 +84,12 @@ class NotificationErrorAdmin(admin.ModelAdmin):
     
     def has_add_permission(self, request):
         return False  # Xatoliklar faqat avtomatik yaratiladi
+    
+    def has_change_permission(self, request, obj=None):
+        return True  # Xatoliklarni tahrirlash mumkin
+    
+    def has_delete_permission(self, request, obj=None):
+        return True  # Xatoliklarni o'chirish mumkin
 
 
 @admin.register(Notification)
