@@ -246,8 +246,12 @@ class NotificationAdmin(admin.ModelAdmin):
         if object_id:
             try:
                 notification = Notification.objects.get(pk=object_id)
-                if not notification.sent_at:
+                has_errors = notification.errors.exists() if notification.sent_at else False
+                # Show send button if not sent, or if sent but has errors (for resending)
+                if not notification.sent_at or has_errors:
                     extra_context['show_send_button'] = True
+                    if notification.sent_at and has_errors:
+                        extra_context['is_resend'] = True
             except Notification.DoesNotExist:
                 pass
         return super().changeform_view(request, object_id, form_url, extra_context)
