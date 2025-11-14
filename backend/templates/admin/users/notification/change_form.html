@@ -6,14 +6,19 @@
     {% if show_send_button %}
         <a href="{% url 'admin:users_notification_send' original.pk %}" 
            class="button" 
-           style="background: #417690; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px; display: inline-block; margin-right: 10px;"
-           onclick="return confirm('Xabarni yuborishni tasdiqlaysizmi?');">
-            📤 Xabarni Yuborish
+           style="background: {% if is_resend %}#ba2121{% else %}#417690{% endif %}; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px; display: inline-block; margin-right: 10px;"
+           onclick="return confirm('{% if is_resend %}Xatoliklar bo\'lgan foydalanuvchilarga qayta yuborishni tasdiqlaysizmi?{% else %}Xabarni yuborishni tasdiqlaysizmi?{% endif %}');">
+            {% if is_resend %}🔄 Qayta Yuborish{% else %}📤 Xabarni Yuborish{% endif %}
         </a>
     {% endif %}
     {% if original.sent_at %}
         <span style="color: green; padding: 10px 15px; display: inline-block;">
             ✅ Xabar yuborilgan: {{ original.sent_at|date:"Y-m-d H:i:s" }}
+            {% if original.errors.exists %}
+                <span style="color: red; margin-left: 10px;">
+                    ⚠️ {{ original.errors.count }} ta xatolik
+                </span>
+            {% endif %}
         </span>
     {% endif %}
     <input type="submit" value="{% trans 'Save' %}" class="default" name="_save">
