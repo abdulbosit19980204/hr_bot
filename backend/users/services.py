@@ -211,65 +211,18 @@ async def send_notification_to_users(notification):
         telegram_message = f"<b>{notification.title}</b>\n\n{telegram_message}"
     
     # Send messages
-    # Check which users already received this notification (to avoid duplicates)
-    @sync_to_async
-    def get_sent_users(notification_obj):
-        # Get users who already have errors (means they were attempted)
-        # We'll send to all recipients, but track new errors separately
-        return set()
-    
-    sent_users = await get_sent_users(notification)
-    
+    # Always save errors - don't check for duplicates, save each attempt separately
     for user in recipients:
-        # Check if we should skip this user (already sent successfully in this batch)
-        # But we still send to allow resending
         try:
             result = await send_telegram_message_async(user.telegram_id, telegram_message)
             if result:
                 successful += 1
             else:
-                # Save error if send failed (don't delete old errors)
+                # Save error if send failed - always save, don't check duplicates
                 failed += 1
                 error_type = "Send Failed"
                 error_message = "Xabar yuborish muvaffaqiyatsiz tugadi (Telegram API False qaytardi)"
-                # Check if error already exists for this user (to avoid duplicates)
-                @sync_to_async
-                def error_exists(notification_obj, user_obj):
-                    from .models import NotificationError
-                    return NotificationError.objects.filter(
-                        notification=notification_obj,
-                        user=user_obj,
-                        error_type=error_type
-                    ).exists()
-                
-                exists = await error_exists(notification, user)
-                if not exists:
-                    await create_error(
-                        notification,
-                        user,
-                        user.telegram_id,
-                        error_type,
-                        error_message
-                    )
-        except Exception as e:
-            logger.error(f"Error sending notification to user {user.id}: {e}", exc_info=True)
-            failed += 1
-            # Save error details (only if not duplicate)
-            error_type = type(e).__name__
-            error_message = str(e)
-            
-            @sync_to_async
-            def error_exists(notification_obj, user_obj, err_type):
-                from .models import NotificationError
-                return NotificationError.objects.filter(
-                    notification=notification_obj,
-                    user=user_obj,
-                    error_type=err_type,
-                    error_message=error_message
-                ).exists()
-            
-            exists = await error_exists(notification, user, error_type)
-            if not exists:
+                # Always create error - each attempt is saved separately
                 await create_error(
                     notification,
                     user,
@@ -277,6 +230,19 @@ async def send_notification_to_users(notification):
                     error_type,
                     error_message
                 )
+        except Exception as e:
+            logger.error(f"Error sending notification to user {user.id}: {e}", exc_info=True)
+            failed += 1
+            # Save error details - always save, each attempt separately
+            error_type = type(e).__name__
+            error_message = str(e)
+            await create_error(
+                notification,
+                user,
+                user.telegram_id,
+                error_type,
+                error_message
+            )
     
     # Update notification statistics (accumulate, don't reset)
     # Get current stats
