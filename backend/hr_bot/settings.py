@@ -9,18 +9,37 @@ import environ
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+# Root directory (project root, one level up from backend)
+ROOT_DIR = BASE_DIR.parent
 
 # Initialize environment variables
 env = environ.Env(
     DEBUG=(bool, False)
 )
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+
+# Try to read from root .env first, then fallback to backend/.env
+root_env = os.path.join(ROOT_DIR, '.env')
+backend_env = os.path.join(BASE_DIR, '.env')
+
+if os.path.exists(root_env):
+    environ.Env.read_env(root_env)
+elif os.path.exists(backend_env):
+    environ.Env.read_env(backend_env)
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env('SECRET_KEY', default='django-insecure-change-this-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG', default=True)
+
+# Log which .env file was loaded (only in debug mode)
+if DEBUG:
+    if os.path.exists(root_env):
+        print(f"✅ Loading environment from root .env: {root_env}")
+    elif os.path.exists(backend_env):
+        print(f"✅ Loading environment from backend/.env: {backend_env}")
+    else:
+        print(f"⚠️ No .env file found. Tried: {root_env} and {backend_env}")
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1', '0.0.0.0','unfunereal-matilda-frenular.ngrok-free.dev','192.168.0.110','192.168.0.111','192.168.0.101','192.168.0.111'])
 

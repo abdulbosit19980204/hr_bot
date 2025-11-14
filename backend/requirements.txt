@@ -8,7 +8,7 @@ django-filter==23.5
 setuptools<81  # pkg_resources deprecated ogohlantirishini oldini olish uchun
 
 # Database
-psycopg2-binary==2.9.9
+#psycopg2-binary==2.9.9
 
 # File handling
 python-docx==1.1.0

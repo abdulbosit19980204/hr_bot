@@ -220,7 +220,7 @@ class NotificationAdmin(admin.ModelAdmin):
                 try:
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
-                    result = loop.run_until_complete(send_telegram_message_async(user.telegram_id, telegram_message))
+                    result, error_type, error_message = loop.run_until_complete(send_telegram_message_async(user.telegram_id, telegram_message))
                     loop.close()
                     
                     if result:
@@ -231,10 +231,13 @@ class NotificationAdmin(admin.ModelAdmin):
                             f"🧪 Test: {test.title}"
                         )
                     else:
+                        error_detail = f"Xatolik turi: {error_type}" if error_type else ""
+                        error_detail += f"\nXatolik xabari: {error_message}" if error_message else ""
                         messages.error(
                             request,
                             f"❌ Xabar yuborishda xatolik yuz berdi.\n"
-                            f"Foydalanuvchi telegram_id: {user.telegram_id}"
+                            f"Foydalanuvchi telegram_id: {user.telegram_id}\n"
+                            f"{error_detail}"
                         )
                 except Exception as e:
                     logger.error(f"Error sending test notification: {e}", exc_info=True)

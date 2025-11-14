@@ -80,14 +80,17 @@ def html_to_telegram_html(html_text):
 async def send_telegram_message_async(telegram_id, message_text, parse_mode='HTML'):
     """
     Send message to Telegram user asynchronously
+    Returns: (success: bool, error_type: str, error_message: str)
     """
     if not TELEGRAM_BOT_TOKEN:
-        logger.error("TELEGRAM_BOT_TOKEN is not set")
-        return False
+        error_msg = "TELEGRAM_BOT_TOKEN is not set. Please set it in backend/.env file or environment variables."
+        logger.error(error_msg)
+        return False, "TELEGRAM_BOT_TOKEN_MISSING", error_msg
     
     if not telegram_id:
-        logger.warning(f"Invalid telegram_id: {telegram_id}")
-        return False
+        error_msg = f"Invalid telegram_id: {telegram_id}"
+        logger.warning(error_msg)
+        return False, "INVALID_TELEGRAM_ID", error_msg
     
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     
@@ -108,10 +111,11 @@ async def send_telegram_message_async(telegram_id, message_text, parse_mode='HTM
                     result = await response.json()
                     if result.get('ok'):
                         logger.info(f"✅ Message sent successfully to telegram_id: {telegram_id}")
-                        return True
+                        return True, None, None
                     else:
                         error_desc = result.get('description', 'Unknown error')
-                        logger.error(f"❌ Telegram API error for telegram_id {telegram_id}: {error_desc}")
+                        error_code = result.get('error_code', 'N/A')
+                        logger.error(f"❌ Telegram API error for telegram_id {telegram_id}: [{error_code}] {error_desc}")
                         # If HTML parse error, try sending as plain text
                         if 'parse' in error_desc.lower() or 'html' in error_desc.lower():
                             logger.info(f"🔄 Retrying as plain text for telegram_id: {telegram_id}")
@@ -127,23 +131,29 @@ async def send_telegram_message_async(telegram_id, message_text, parse_mode='HTM
                                     retry_result = await retry_response.json()
                                     if retry_result.get('ok'):
                                         logger.info(f"✅ Message sent as plain text to telegram_id: {telegram_id}")
-                                        return True
-                        return False
+                                        return True, None, None
+                        # Return detailed error for logging
+                        error_type = f"Telegram API Error {error_code}"
+                        error_message = f"[{error_code}] {error_desc}"
+                        return False, error_type, error_message
                 else:
                     error_text = await response.text()
                     logger.error(f"❌ HTTP {response.status} error sending message to telegram_id {telegram_id}: {error_text}")
-                    return False
+                    return False, f"HTTP {response.status}", error_text
     except asyncio.TimeoutError:
-        logger.error(f"Timeout sending message to telegram_id: {telegram_id}")
-        return False
+        error_msg = f"Timeout sending message to telegram_id: {telegram_id}"
+        logger.error(error_msg)
+        return False, "TimeoutError", error_msg
     except Exception as e:
-        logger.error(f"Error sending message to telegram_id {telegram_id}: {e}", exc_info=True)
-        return False
+        error_msg = f"Error sending message to telegram_id {telegram_id}: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return False, type(e).__name__, str(e)
 
 
 def send_telegram_message_sync(telegram_id, message_text, parse_mode='HTML'):
     """
     Synchronous wrapper for send_telegram_message_async
+    Returns: (success: bool, error_type: str, error_message: str)
     """
     try:
         loop = asyncio.get_event_loop()
@@ -214,14 +224,21 @@ async def send_notification_to_users(notification):
     # Always save errors - don't check for duplicates, save each attempt separately
     for user in recipients:
         try:
-            result = await send_telegram_message_async(user.telegram_id, telegram_message)
+            result, error_type, error_message = await send_telegram_message_async(user.telegram_id, telegram_message)
             if result:
                 successful += 1
             else:
                 # Save error if send failed - always save, don't check duplicates
                 failed += 1
-                error_type = "Send Failed"
-                error_message = "Xabar yuborish muvaffaqiyatsiz tugadi (Telegram API False qaytardi)"
+                # Use detailed error information from send_telegram_message_async
+                if not error_type:
+                    error_type = "Send Failed"
+                if not error_message:
+                    # Check if TELEGRAM_BOT_TOKEN is missing
+                    if not TELEGRAM_BOT_TOKEN:
+                        error_message = "TELEGRAM_BOT_TOKEN o'rnatilmagan. Iltimos, backend/.env faylida TELEGRAM_BOT_TOKEN ni o'rnating."
+                    else:
+                        error_message = "Xabar yuborish muvaffaqiyatsiz tugadi (Telegram API False qaytardi). Tafsilotlar log faylida."
                 # Always create error - each attempt is saved separately
                 await create_error(
                     notification,
