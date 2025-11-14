@@ -130,20 +130,19 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # CKEditor settings
 CKEDITOR_CONFIGS = {
     'default': {
-        'toolbar': 'full',
+        'toolbar': 'Custom',
         'height': 300,
         'width': '100%',
         'toolbar_Custom': [
-            ['Bold', 'Italic', 'Underline'],
-            ['NumberedList', 'BulletedList', '-', 'Outdent', 'Indent', '-', 'JustifyLeft', 'JustifyCenter', 'JustifyRight', 'JustifyBlock'],
+            ['Bold', 'Italic', 'Underline', 'Strike'],
+            ['NumberedList', 'BulletedList', '-', 'Outdent', 'Indent'],
+            ['JustifyLeft', 'JustifyCenter', 'JustifyRight', 'JustifyBlock'],
             ['Link', 'Unlink'],
-            ['RemoveFormat', 'Source'],
             ['TextColor', 'BGColor'],
             ['Format', 'Font', 'FontSize'],
+            ['RemoveFormat', 'Source'],
         ],
-        'toolbar': 'Custom',
         'extraPlugins': ','.join([
-            'uploadimage',
             'div',
             'autolink',
             'autoembed',
