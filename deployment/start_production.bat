@@ -22,14 +22,16 @@ echo   HR Bot Production Start Script
 echo ========================================
 echo.
 
-REM Function to check if port is in use
+REM Function to check if port is in use and kill processes
 :check_port
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":%1" ^| findstr "LISTENING"') do (
-    echo Port %1 is already in use (PID: %%a)
+set PORT_NUM=%~1
+if "%PORT_NUM%"=="" exit /b 0
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":%PORT_NUM%" ^| findstr "LISTENING"') do (
+    echo [*] Port %PORT_NUM% is already in use (PID: %%a), killing...
     taskkill /F /PID %%a >nul 2>&1
-    timeout /t 2 /nobreak >nul
+    timeout /t 1 /nobreak >nul
 )
-goto :eof
+exit /b 0
 
 REM Kill existing processes
 echo [*] Cleaning up existing processes...
@@ -37,30 +39,23 @@ echo.
 
 REM Kill backend processes
 echo [*] Stopping backend on port %BACKEND_PORT%...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":%BACKEND_PORT%" ^| findstr "LISTENING"') do (
-    taskkill /F /PID %%a >nul 2>&1
-)
 call :check_port %BACKEND_PORT%
 
 REM Kill telegram bot processes
 echo [*] Stopping telegram bot...
-taskkill /F /IM python.exe /FI "WINDOWTITLE eq *bot.py*" >nul 2>&1
-for /f "tokens=2" %%a in ('tasklist /FI "IMAGENAME eq python.exe" /FO CSV ^| findstr "bot.py"') do (
-    taskkill /F /PID %%a >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq *bot.py*" >nul 2>&1
+for /f "tokens=2" %%a in ('tasklist /FI "IMAGENAME eq python.exe" /FO CSV 2^>nul ^| findstr /i "bot.py"') do (
+    set PID=%%a
+    set PID=!PID:"=!
+    if not "!PID!"=="" taskkill /F /PID !PID! >nul 2>&1
 )
 
 REM Kill webapp processes
 echo [*] Stopping webapp on port %WEBAPP_PORT%...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":%WEBAPP_PORT%" ^| findstr "LISTENING"') do (
-    taskkill /F /PID %%a >nul 2>&1
-)
 call :check_port %WEBAPP_PORT%
 
 REM Kill dashboard processes
 echo [*] Stopping dashboard on port %DASHBOARD_PORT%...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":%DASHBOARD_PORT%" ^| findstr "LISTENING"') do (
-    taskkill /F /PID %%a >nul 2>&1
-)
 call :check_port %DASHBOARD_PORT%
 
 echo [OK] All ports cleared
@@ -118,8 +113,8 @@ if exist "%PROJECT_DIR%\deployment\gunicorn_config.py" (
 )
 
 REM Get backend PID (approximate)
-timeout /t 2 /nobreak >nul
-for /f "tokens=2" %%a in ('netstat -aon ^| findstr ":%BACKEND_PORT%" ^| findstr "LISTENING"') do (
+timeout /t 3 /nobreak >nul
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":%BACKEND_PORT%" ^| findstr "LISTENING"') do (
     echo [OK] Backend started (PID: %%a)
     echo %%a > "%PROJECT_DIR%\backend.pid"
     goto backend_started
@@ -158,11 +153,15 @@ REM Start telegram bot in background
 echo [*] Starting Telegram Bot...
 start /B "" python bot.py > logs\telegram_bot.log 2>&1
 
-timeout /t 2 /nobreak >nul
-for /f "tokens=2" %%a in ('tasklist /FI "IMAGENAME eq python.exe" /FO CSV ^| findstr "bot.py"') do (
-    echo [OK] Telegram Bot started (PID: %%a)
-    echo %%a > "%PROJECT_DIR%\telegram_bot.pid"
-    goto telegram_started
+timeout /t 3 /nobreak >nul
+for /f "tokens=2" %%a in ('tasklist /FI "IMAGENAME eq python.exe" /FO CSV 2^>nul ^| findstr /i "bot.py"') do (
+    set BOT_PID=%%a
+    set BOT_PID=!BOT_PID:"=!
+    if not "!BOT_PID!"=="" (
+        echo [OK] Telegram Bot started (PID: !BOT_PID!)
+        echo !BOT_PID! > "%PROJECT_DIR%\telegram_bot.pid"
+        goto telegram_started
+    )
 )
 echo [OK] Telegram Bot started
 echo [WARNING] Could not get PID, check logs: %TELEGRAM_BOT_DIR%\logs\telegram_bot.log
@@ -223,7 +222,7 @@ echo [*] Starting Dashboard on port %DASHBOARD_PORT%...
 start /B "" npm run preview -- --port %DASHBOARD_PORT% --host 0.0.0.0 > dashboard.log 2>&1
 
 timeout /t 3 /nobreak >nul
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":%DASHBOARD_PORT%" ^| findstr "LISTENING"') do (
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":%DASHBOARD_PORT%" ^| findstr "LISTENING"') do (
     echo [OK] Dashboard started (PID: %%a)
     echo %%a > "%PROJECT_DIR%\dashboard.pid"
     goto dashboard_started
