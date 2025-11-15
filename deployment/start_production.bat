@@ -24,15 +24,13 @@ echo.
 
 REM Function to check if port is in use and kill processes
 :check_port
-setlocal enabledelayedexpansion
 set "PORT_NUM=%~1"
-if "!PORT_NUM!"=="" exit /b 0
-for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":!PORT_NUM!" ^| findstr "LISTENING"') do (
-    echo [*] Port !PORT_NUM! is already in use (PID: %%a), killing...
+if "%PORT_NUM%"=="" exit /b 0
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":%PORT_NUM%" ^| findstr "LISTENING"') do (
+    echo [*] Port %PORT_NUM% is already in use (PID: %%a), killing...
     taskkill /F /PID %%a >nul 2>&1
     timeout /t 1 /nobreak >nul
 )
-endlocal
 exit /b 0
 
 REM Kill existing processes
