@@ -10,12 +10,26 @@
 
 ## 🚀 Production'da Ishga Tushirish
 
-### 1. Skriptni ishga tushirish
+### Linux/Mac uchun:
 
 ```bash
 cd /path/to/hr_bot
 chmod +x deployment/start_production.sh
 ./deployment/start_production.sh
+```
+
+### Windows uchun:
+
+```cmd
+cd D:\coding\hr_bot
+deployment\start_production.bat
+```
+
+Yoki:
+
+```cmd
+cd D:\coding\hr_bot
+deployment\start_production.bat
 ```
 
 ### 2. Environment Variables
@@ -80,6 +94,7 @@ export DASHBOARD_PORT=3000
 
 ### 5. Servislarni To'xtatish
 
+**Linux/Mac:**
 ```bash
 ./deployment/stop_production.sh
 ```
@@ -88,6 +103,17 @@ Yoki:
 
 ```bash
 kill $(cat backend.pid) $(cat telegram_bot.pid) $(cat webapp.pid) $(cat dashboard.pid)
+```
+
+**Windows:**
+```cmd
+deployment\stop_production.bat
+```
+
+Yoki:
+
+```cmd
+taskkill /F /PID <PID> (har bir servis uchun)
 ```
 
 ## 📊 Loglar
@@ -123,12 +149,23 @@ Agar Nginx reverse proxy ishlatmoqchi bo'lsangiz, `deployment/nginx_hr_bot.conf`
 ## 🐛 Muammolarni Hal Qilish
 
 ### Port allaqachon ishlatilmoqda:
+
+**Linux/Mac:**
 ```bash
 # Port'ni tekshirish
 lsof -i :8000
 
 # Process'ni to'xtatish
 kill -9 $(lsof -ti:8000)
+```
+
+**Windows:**
+```cmd
+REM Port'ni tekshirish
+netstat -aon | findstr :8000
+
+REM Process'ni to'xtatish (PID ni topib)
+taskkill /F /PID <PID>
 ```
 
 ### Virtual environment topilmayapti:
@@ -165,8 +202,71 @@ cat dashboard/dashboard_build.log
 
 ## 🔄 Qayta Ishga Tushirish
 
+**Linux/Mac:**
 ```bash
 ./deployment/stop_production.sh
 ./deployment/start_production.sh
+```
+
+**Windows:**
+```cmd
+deployment\stop_production.bat
+deployment\start_production.bat
+```
+
+## 🪟 Windows uchun Qo'shimcha Ma'lumotlar
+
+### Talablar:
+- Python 3.11+ (PATH'da bo'lishi kerak yoki virtual environment'da)
+- Node.js 18+ (npm bilan)
+- Gunicorn (`pip install gunicorn`)
+
+### Virtual Environment Yaratish:
+
+**Backend uchun:**
+```cmd
+cd backend
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+pip install gunicorn
+```
+
+**Telegram Bot uchun:**
+```cmd
+cd telegram_bot
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Portlarni O'zgartirish (Windows):
+
+Environment variable'lar orqali:
+```cmd
+set BACKEND_PORT=8000
+set WEBAPP_PORT=5173
+set DASHBOARD_PORT=3000
+deployment\start_production.bat
+```
+
+Yoki skript ichida o'zgartirish:
+```cmd
+set BACKEND_PORT=8000
+set WEBAPP_PORT=5173
+set DASHBOARD_PORT=3000
+```
+
+### Windows'da Process'larni Tekshirish:
+
+```cmd
+REM Barcha Python process'larni ko'rish
+tasklist | findstr python
+
+REM Barcha Node process'larni ko'rish
+tasklist | findstr node
+
+REM Port'ni ishlatayotgan process'ni topish
+netstat -aon | findstr :8000
 ```
 
