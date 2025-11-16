@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
-from django.db.models import Q, Count, Avg
+from django.db.models import Q, Count, Avg, F
 from django.db import models
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
@@ -1765,11 +1765,14 @@ class StatisticsView(APIView):
         total_notifications = Notification.objects.count()
         sent_notifications = Notification.objects.exclude(sent_at__isnull=True).count()
         draft_notifications = Notification.objects.filter(sent_at__isnull=True).count()
-        total_successful_sends = Notification.objects.aggregate(
-            total=Count('id'),
-            successful=Count('successful_sends')
-        )
-        success_rate = (total_successful_sends['successful'] / total_successful_sends['total'] * 100) if total_successful_sends['total'] > 0 else 0
+        total_successful_count = Notification.objects.aggregate(
+            sum_successful=Count('successful_sends', filter=Q(successful_sends__gt=0))
+        )['sum_successful'] or 0
+        # Calculate success rate based on total recipients vs successful sends
+        total_recipients = Notification.objects.aggregate(
+            sum_recipients=Count('total_recipients', filter=Q(total_recipients__gt=0))
+        )['sum_recipients'] or 0
+        success_rate = (total_successful_count / total_recipients * 100) if total_recipients > 0 else 0
         
         # Top notification errors (by type) - aggregated
         from users.models import NotificationError
@@ -1841,7 +1844,7 @@ class StatisticsView(APIView):
             'total_notifications': total_notifications,
             'sent_notifications': sent_notifications,
             'draft_notifications': draft_notifications,
-            'total_successful_sends': total_successful_sends.get('successful', 0),
+            'total_successful_sends': total_successful_count,
             'success_rate': round(success_rate, 2),
             'top_notification_errors': list(top_errors),
             
