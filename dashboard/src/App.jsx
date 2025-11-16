@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import Dashboard from './components/Dashboard'
 import Login from './components/Login'
+import ToastContainer from './components/ToastContainer'
 import './App.css'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
@@ -9,6 +10,24 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [toasts, setToasts] = useState([])
+
+  const showToast = (message, type = 'info', duration = 3000) => {
+    const id = Date.now()
+    setToasts(prev => [...prev, { id, message, type, duration }])
+  }
+
+  const removeToast = (id) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id))
+  }
+
+  // Make showToast available globally
+  useEffect(() => {
+    window.showToast = showToast
+    return () => {
+      delete window.showToast
+    }
+  }, [])
 
   useEffect(() => {
     checkAuth()
@@ -40,10 +59,20 @@ function App() {
   }
 
   if (!isAuthenticated) {
-    return <Login onLogin={handleLogin} apiBaseUrl={API_BASE_URL} />
+    return (
+      <>
+        <Login onLogin={handleLogin} apiBaseUrl={API_BASE_URL} />
+        <ToastContainer toasts={toasts} removeToast={removeToast} />
+      </>
+    )
   }
 
-  return <Dashboard onLogout={handleLogout} apiBaseUrl={API_BASE_URL} />
+  return (
+    <>
+      <Dashboard onLogout={handleLogout} apiBaseUrl={API_BASE_URL} />
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
+    </>
+  )
 }
 
 export default App
