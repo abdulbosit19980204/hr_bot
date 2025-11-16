@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
+import { Icon } from './Icons'
 import './Dashboard.css'
 
 function PositionsList({ apiBaseUrl }) {
@@ -14,12 +15,24 @@ function PositionsList({ apiBaseUrl }) {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingPosition, setEditingPosition] = useState(null)
+  const [showColumnSettings, setShowColumnSettings] = useState(false)
+  const [showFilters, setShowFilters] = useState(true)
   
   // Form states
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     is_open: true
+  })
+  
+  // Column visibility state
+  const [visibleColumns, setVisibleColumns] = useState({
+    id: true,
+    name: true,
+    description: true,
+    status: true,
+    testsCount: true,
+    createdAt: true
   })
 
   useEffect(() => {
@@ -239,20 +252,48 @@ function PositionsList({ apiBaseUrl }) {
   }
 
   return (
-    <div className="table-card">
+    <div className="table-card" style={{ position: 'relative' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <h3 style={{ margin: 0 }}>Lavozimlar</h3>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn"
+            onClick={() => setShowFilters(!showFilters)}
+            style={{ margin: 0, background: '#6c757d' }}
+            title="Filtrlarni ko'rsatish/yashirish"
+          >
+            <Icon name="filter" size={16} color="white" /> {showFilters ? 'Filtrlarni yashirish' : 'Filtrlarni ko\'rsatish'}
+          </button>
+          <button
+            className="btn"
+            onClick={() => setShowColumnSettings(!showColumnSettings)}
+            style={{ margin: 0, background: '#6c757d', position: 'relative' }}
+            title="Ustunlarni boshqarish"
+          >
+            <Icon name="settings" size={16} color="white" /> Ustunlar
+          </button>
           {isSuperuser && (
             <button
               className="btn"
               onClick={handleCreate}
               style={{ margin: 0, background: '#28a745' }}
             >
-              + Yangi lavozim
+              <Icon name="plus" size={16} color="white" /> Yangi lavozim
             </button>
           )}
-          <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px' }}>
+        </div>
+      </div>
+
+      {/* Filters Section - Toggleable */}
+      {showFilters && (
+        <div style={{ 
+          marginBottom: '20px', 
+          padding: '16px', 
+          background: 'var(--bg-tertiary)', 
+          borderRadius: '12px',
+          border: '1px solid var(--border)'
+        }}>
+          <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <input
               type="text"
               className="input"
@@ -275,9 +316,70 @@ function PositionsList({ apiBaseUrl }) {
               <option value="false">Yopiq</option>
             </select>
             <button type="submit" className="btn" style={{ margin: 0 }}>Qidirish</button>
+            {(searchTerm || isOpenFilter) && (
+              <button 
+                type="button"
+                className="btn" 
+                onClick={() => {
+                  setSearchTerm('')
+                  setIsOpenFilter('')
+                  setPage(1)
+                }}
+                style={{ margin: 0, background: '#6c757d' }}
+              >
+                Tozalash
+              </button>
+            )}
           </form>
         </div>
-      </div>
+      )}
+
+      {/* Column Settings Dropdown */}
+      {showColumnSettings && (
+        <div style={{
+          position: 'absolute',
+          top: '60px',
+          right: '10px',
+          background: 'white',
+          border: '1px solid #E6E6E6',
+          borderRadius: '12px',
+          boxShadow: '0 8px 16px rgba(0, 0, 0, 0.10)',
+          padding: '16px',
+          zIndex: 100,
+          minWidth: '200px',
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div style={{ marginBottom: '12px', fontWeight: 600, fontSize: '14px', color: '#1A1A1A' }}>
+            Ustunlarni tanlash
+          </div>
+          {Object.entries({
+            id: 'ID',
+            name: 'Nomi',
+            description: 'Tavsif',
+            status: 'Holat',
+            testsCount: 'Testlar soni',
+            createdAt: 'Yaratilgan'
+          }).map(([key, label]) => (
+            <label key={key} style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              padding: '8px 0',
+              cursor: 'pointer',
+              fontSize: '14px',
+              color: '#1A1A1A'
+            }}>
+              <input
+                type="checkbox"
+                checked={visibleColumns[key]}
+                onChange={(e) => setVisibleColumns({ ...visibleColumns, [key]: e.target.checked })}
+                style={{ cursor: 'pointer' }}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      )}
 
       {positions.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
@@ -285,68 +387,83 @@ function PositionsList({ apiBaseUrl }) {
         </div>
       ) : (
         <>
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Nomi</th>
-                <th>Tavsif</th>
-                <th>Holat</th>
-                <th>Testlar soni</th>
-                <th>Yaratilgan</th>
-                {isSuperuser && <th>Harakatlar</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {positions.map((position) => (
-                <tr key={position.id}>
-                  <td>{position.id}</td>
-                  <td>{position.name}</td>
-                  <td style={{ maxWidth: '300px', wordBreak: 'break-word' }}>
-                    {position.description || '-'}
-                  </td>
-                  <td>
-                    {position.is_open ? (
-                      <span style={{ color: '#28a745' }}>Ochiq</span>
-                    ) : (
-                      <span style={{ color: '#dc3545' }}>Yopiq</span>
-                    )}
-                  </td>
-                  <td>{position.tests_count || 0}</td>
-                  <td>{formatDate(position.created_at)}</td>
-                  {isSuperuser && (
-                    <td>
-                      <button
-                        className="btn"
-                        onClick={() => handleEdit(position)}
-                        style={{ 
-                          padding: '4px 8px', 
-                          fontSize: '14px', 
-                          marginRight: '5px',
-                          background: '#229ED9'
-                        }}
-                        title="Tahrirlash"
-                      >
-                        ✏
-                      </button>
-                      <button
-                        className="btn"
-                        onClick={() => handleDelete(position.id)}
-                        style={{ 
-                          padding: '4px 8px', 
-                          fontSize: '14px',
-                          background: '#dc3545'
-                        }}
-                        title="O'chirish"
-                      >
-                        🗑
-                      </button>
-                    </td>
-                  )}
+          <div style={{ 
+            overflowX: 'auto', 
+            overflowY: 'auto',
+            maxHeight: 'calc(100vh - 400px)',
+            position: 'relative',
+            border: '1px solid var(--border)',
+            borderRadius: '12px'
+          }}>
+            <table style={{ width: '100%', minWidth: '100%' }}>
+              <thead>
+                <tr>
+                  {visibleColumns.id && <th>ID</th>}
+                  {visibleColumns.name && <th>Nomi</th>}
+                  {visibleColumns.description && <th>Tavsif</th>}
+                  {visibleColumns.status && <th>Holat</th>}
+                  {visibleColumns.testsCount && <th>Testlar soni</th>}
+                  {visibleColumns.createdAt && <th>Yaratilgan</th>}
+                  {isSuperuser && <th>Harakatlar</th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {positions.map((position) => (
+                  <tr key={position.id}>
+                    {visibleColumns.id && <td>{position.id}</td>}
+                    {visibleColumns.name && <td>{position.name}</td>}
+                    {visibleColumns.description && (
+                      <td style={{ maxWidth: '300px', wordBreak: 'break-word' }}>
+                        {position.description || '-'}
+                      </td>
+                    )}
+                    {visibleColumns.status && (
+                      <td>
+                        {position.is_open ? (
+                          <span style={{ color: '#28a745' }}>Ochiq</span>
+                        ) : (
+                          <span style={{ color: '#dc3545' }}>Yopiq</span>
+                        )}
+                      </td>
+                    )}
+                    {visibleColumns.testsCount && <td>{position.tests_count || 0}</td>}
+                    {visibleColumns.createdAt && <td>{formatDate(position.created_at)}</td>}
+                    {isSuperuser && (
+                      <td>
+                        <button
+                          className="btn"
+                          onClick={() => handleEdit(position)}
+                          style={{ 
+                            padding: '6px 12px', 
+                            fontSize: '14px', 
+                            marginRight: '5px',
+                            background: '#229ED9',
+                            color: 'white'
+                          }}
+                          title="Tahrirlash"
+                        >
+                          <Icon name="pencil" size={14} color="white" />
+                        </button>
+                        <button
+                          className="btn"
+                          onClick={() => handleDelete(position.id)}
+                          style={{ 
+                            padding: '6px 12px', 
+                            fontSize: '14px',
+                            background: '#dc3545',
+                            color: 'white'
+                          }}
+                          title="O'chirish"
+                        >
+                          <Icon name="trash" size={14} color="white" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           
           {totalPages > 1 && (
             <div style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'center' }}>

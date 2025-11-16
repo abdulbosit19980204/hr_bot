@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
+import { Icon } from './Icons'
 import './Dashboard.css'
 
 function NotificationsList({ apiBaseUrl }) {
@@ -11,6 +12,19 @@ function NotificationsList({ apiBaseUrl }) {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [sendToAllFilter, setSendToAllFilter] = useState('')
+  const [showColumnSettings, setShowColumnSettings] = useState(false)
+  const [showFilters, setShowFilters] = useState(true)
+  
+  // Column visibility state
+  const [visibleColumns, setVisibleColumns] = useState({
+    id: true,
+    title: true,
+    recipients: true,
+    successful: true,
+    failed: true,
+    sentAt: true,
+    createdBy: true
+  })
 
   useEffect(() => {
     loadNotifications()
@@ -185,10 +199,39 @@ function NotificationsList({ apiBaseUrl }) {
   }
 
   return (
-    <div className="table-card">
+    <div className="table-card" style={{ position: 'relative' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <h3 style={{ margin: 0 }}>Xabarlar</h3>
-        <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn"
+            onClick={() => setShowFilters(!showFilters)}
+            style={{ margin: 0, background: '#6c757d' }}
+            title="Filtrlarni ko'rsatish/yashirish"
+          >
+            <Icon name="filter" size={16} color="white" /> {showFilters ? 'Filtrlarni yashirish' : 'Filtrlarni ko\'rsatish'}
+          </button>
+          <button
+            className="btn"
+            onClick={() => setShowColumnSettings(!showColumnSettings)}
+            style={{ margin: 0, background: '#6c757d', position: 'relative' }}
+            title="Ustunlarni boshqarish"
+          >
+            <Icon name="settings" size={16} color="white" /> Ustunlar
+          </button>
+        </div>
+      </div>
+
+      {/* Filters Section - Toggleable */}
+      {showFilters && (
+        <div style={{ 
+          marginBottom: '20px', 
+          padding: '16px', 
+          background: 'var(--bg-tertiary)', 
+          borderRadius: '12px',
+          border: '1px solid var(--border)'
+        }}>
+          <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <input
             type="text"
             className="input"
@@ -211,8 +254,71 @@ function NotificationsList({ apiBaseUrl }) {
             <option value="false">Tanlanganlarga</option>
           </select>
           <button type="submit" className="btn" style={{ margin: 0 }}>Qidirish</button>
+          {(searchTerm || sendToAllFilter) && (
+            <button 
+              type="button"
+              className="btn" 
+              onClick={() => {
+                setSearchTerm('')
+                setSendToAllFilter('')
+                setPage(1)
+              }}
+              style={{ margin: 0, background: '#6c757d' }}
+            >
+              Tozalash
+            </button>
+          )}
         </form>
       </div>
+      )}
+
+      {/* Column Settings Dropdown */}
+      {showColumnSettings && (
+        <div style={{
+          position: 'absolute',
+          top: '60px',
+          right: '10px',
+          background: 'white',
+          border: '1px solid #E6E6E6',
+          borderRadius: '12px',
+          boxShadow: '0 8px 16px rgba(0, 0, 0, 0.10)',
+          padding: '16px',
+          zIndex: 100,
+          minWidth: '200px',
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div style={{ marginBottom: '12px', fontWeight: 600, fontSize: '14px', color: '#1A1A1A' }}>
+            Ustunlarni tanlash
+          </div>
+          {Object.entries({
+            id: 'ID',
+            title: 'Sarlavha',
+            recipients: 'Qabul qiluvchilar',
+            successful: 'Muvaffaqiyatli',
+            failed: 'Xatolik',
+            sentAt: 'Yuborilgan vaqt',
+            createdBy: 'Yaratgan'
+          }).map(([key, label]) => (
+            <label key={key} style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              padding: '8px 0',
+              cursor: 'pointer',
+              fontSize: '14px',
+              color: '#1A1A1A'
+            }}>
+              <input
+                type="checkbox"
+                checked={visibleColumns[key]}
+                onChange={(e) => setVisibleColumns({ ...visibleColumns, [key]: e.target.checked })}
+                style={{ cursor: 'pointer' }}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      )}
 
       {notifications.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
@@ -220,58 +326,73 @@ function NotificationsList({ apiBaseUrl }) {
         </div>
       ) : (
         <>
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Sarlavha</th>
-                <th>Qabul qiluvchilar</th>
-                <th>Muvaffaqiyatli</th>
-                <th>Xatolik</th>
-                <th>Yuborilgan vaqt</th>
-                <th>Yaratgan</th>
-                <th>Harakatlar</th>
-              </tr>
-            </thead>
-            <tbody>
-              {notifications.map((notification) => (
-                <tr key={notification.id}>
-                  <td>{notification.id}</td>
-                  <td>{notification.title}</td>
-                  <td>
-                    {notification.send_to_all ? (
-                      <span style={{ color: '#229ED9' }}>Barcha</span>
-                    ) : (
-                      `${notification.recipients_count || 0} ta`
-                    )}
-                  </td>
-                  <td style={{ color: '#28a745' }}>{notification.successful_sends || 0}</td>
-                  <td style={{ color: '#dc3545' }}>
-                    {notification.failed_sends || 0}
-                    {notification.errors_count > 0 && (
-                      <span title="Xatoliklar bor"> ⚠️</span>
-                    )}
-                  </td>
-                  <td>{formatDate(notification.sent_at)}</td>
-                  <td>
-                    {notification.created_by 
-                      ? `${notification.created_by.first_name} ${notification.created_by.last_name}`
-                      : '-'
-                    }
-                  </td>
-                  <td>
-                    <button 
-                      className="btn" 
-                      onClick={() => handleNotificationClick(notification)}
-                      style={{ padding: '6px 12px', fontSize: '14px' }}
-                    >
-                      Ko'rish
-                    </button>
-                  </td>
+          <div style={{ 
+            overflowX: 'auto', 
+            overflowY: 'auto',
+            maxHeight: 'calc(100vh - 400px)',
+            position: 'relative',
+            border: '1px solid var(--border)',
+            borderRadius: '12px'
+          }}>
+            <table style={{ width: '100%', minWidth: '100%' }}>
+              <thead>
+                <tr>
+                  {visibleColumns.id && <th>ID</th>}
+                  {visibleColumns.title && <th>Sarlavha</th>}
+                  {visibleColumns.recipients && <th>Qabul qiluvchilar</th>}
+                  {visibleColumns.successful && <th>Muvaffaqiyatli</th>}
+                  {visibleColumns.failed && <th>Xatolik</th>}
+                  {visibleColumns.sentAt && <th>Yuborilgan vaqt</th>}
+                  {visibleColumns.createdBy && <th>Yaratgan</th>}
+                  <th>Harakatlar</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {notifications.map((notification) => (
+                  <tr key={notification.id}>
+                    {visibleColumns.id && <td>{notification.id}</td>}
+                    {visibleColumns.title && <td>{notification.title}</td>}
+                    {visibleColumns.recipients && (
+                      <td>
+                        {notification.send_to_all ? (
+                          <span style={{ color: '#229ED9' }}>Barcha</span>
+                        ) : (
+                          `${notification.recipients_count || 0} ta`
+                        )}
+                      </td>
+                    )}
+                    {visibleColumns.successful && <td style={{ color: '#28a745' }}>{notification.successful_sends || 0}</td>}
+                    {visibleColumns.failed && (
+                      <td style={{ color: '#dc3545' }}>
+                        {notification.failed_sends || 0}
+                        {notification.errors_count > 0 && (
+                          <span title="Xatoliklar bor"> ⚠️</span>
+                        )}
+                      </td>
+                    )}
+                    {visibleColumns.sentAt && <td>{formatDate(notification.sent_at)}</td>}
+                    {visibleColumns.createdBy && (
+                      <td>
+                        {notification.created_by 
+                          ? `${notification.created_by.first_name} ${notification.created_by.last_name}`
+                          : '-'
+                        }
+                      </td>
+                    )}
+                    <td>
+                      <button 
+                        className="btn" 
+                        onClick={() => handleNotificationClick(notification)}
+                        style={{ padding: '6px 12px', fontSize: '14px' }}
+                      >
+                        <Icon name="eye" size={14} color="currentColor" /> Ko'rish
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           
           {totalPages > 1 && (
             <div style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'center' }}>

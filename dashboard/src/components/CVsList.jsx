@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import CVDetail from './CVDetail'
+import { Icon } from './Icons'
 import './Dashboard.css'
 
 function CVsList({ apiBaseUrl }) {
@@ -14,6 +15,19 @@ function CVsList({ apiBaseUrl }) {
   const [totalPages, setTotalPages] = useState(1)
   const [selectedCV, setSelectedCV] = useState(null)
   const [selectedCVs, setSelectedCVs] = useState([])
+  const [showColumnSettings, setShowColumnSettings] = useState(false)
+  const [showFilters, setShowFilters] = useState(true)
+  
+  // Column visibility state
+  const [visibleColumns, setVisibleColumns] = useState({
+    id: true,
+    user: true,
+    phone: true,
+    email: true,
+    fileName: true,
+    fileSize: true,
+    uploadedAt: true
+  })
 
   useEffect(() => {
     loadUsers()
@@ -186,10 +200,39 @@ function CVsList({ apiBaseUrl }) {
   }
 
   return (
-    <div className="table-card">
+    <div className="table-card" style={{ position: 'relative' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-        <h3 style={{ margin: 0 }}>CV'lar</h3>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <h3 style={{ margin: 0 }}>CV'lar</h3>
+          {selectedCVs.length > 0 && (
+            <span style={{ 
+              background: '#229ED9', 
+              color: 'white', 
+              padding: '4px 12px', 
+              borderRadius: '12px',
+              fontSize: '14px'
+            }}>
+              {selectedCVs.length} ta tanlangan
+            </span>
+          )}
+        </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn"
+            onClick={() => setShowFilters(!showFilters)}
+            style={{ margin: 0, background: '#6c757d' }}
+            title="Filtrlarni ko'rsatish/yashirish"
+          >
+            <Icon name="filter" size={16} color="white" /> {showFilters ? 'Filtrlarni yashirish' : 'Filtrlarni ko\'rsatish'}
+          </button>
+          <button
+            className="btn"
+            onClick={() => setShowColumnSettings(!showColumnSettings)}
+            style={{ margin: 0, background: '#6c757d', position: 'relative' }}
+            title="Ustunlarni boshqarish"
+          >
+            <Icon name="settings" size={16} color="white" /> Ustunlar
+          </button>
           {selectedCVs.length > 0 && (
             <button
               className="btn"
@@ -197,10 +240,22 @@ function CVsList({ apiBaseUrl }) {
               style={{ margin: 0, background: '#28a745' }}
               title="Tanlangan CV'larni ZIP formatida yuklab olish"
             >
-              📦 Yuklab olish ({selectedCVs.length})
+              <Icon name="package" size={16} color="white" /> Yuklab olish ({selectedCVs.length})
             </button>
           )}
-          <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px' }}>
+        </div>
+      </div>
+
+      {/* Filters Section - Toggleable */}
+      {showFilters && (
+        <div style={{ 
+          marginBottom: '20px', 
+          padding: '16px', 
+          background: 'var(--bg-tertiary)', 
+          borderRadius: '12px',
+          border: '1px solid var(--border)'
+        }}>
+          <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <input
               type="text"
               className="input"
@@ -242,7 +297,55 @@ function CVsList({ apiBaseUrl }) {
             )}
           </form>
         </div>
-      </div>
+      )}
+
+      {/* Column Settings Dropdown */}
+      {showColumnSettings && (
+        <div style={{
+          position: 'absolute',
+          top: '60px',
+          right: '10px',
+          background: 'white',
+          border: '1px solid #E6E6E6',
+          borderRadius: '12px',
+          boxShadow: '0 8px 16px rgba(0, 0, 0, 0.10)',
+          padding: '16px',
+          zIndex: 100,
+          minWidth: '200px',
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div style={{ marginBottom: '12px', fontWeight: 600, fontSize: '14px', color: '#1A1A1A' }}>
+            Ustunlarni tanlash
+          </div>
+          {Object.entries({
+            id: 'ID',
+            user: 'Foydalanuvchi',
+            phone: 'Telefon',
+            email: 'Email',
+            fileName: 'Fayl nomi',
+            fileSize: 'Fayl hajmi',
+            uploadedAt: 'Yuklangan'
+          }).map(([key, label]) => (
+            <label key={key} style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              padding: '8px 0',
+              cursor: 'pointer',
+              fontSize: '14px',
+              color: '#1A1A1A'
+            }}>
+              <input
+                type="checkbox"
+                checked={visibleColumns[key]}
+                onChange={(e) => setVisibleColumns({ ...visibleColumns, [key]: e.target.checked })}
+                style={{ cursor: 'pointer' }}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      )}
 
       {cvs.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
@@ -250,57 +353,66 @@ function CVsList({ apiBaseUrl }) {
         </div>
       ) : (
         <>
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: '40px' }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedCVs.length === cvs.length && cvs.length > 0}
-                    onChange={handleSelectAll}
-                    title="Barchasini tanlash"
-                  />
-                </th>
-                <th>ID</th>
-                <th>Foydalanuvchi</th>
-                <th>Telefon</th>
-                <th>Email</th>
-                <th>Fayl nomi</th>
-                <th>Fayl hajmi</th>
-                <th>Yuklangan</th>
-                <th>Harakatlar</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cvs.map((cv) => (
-                <tr key={cv.id}>
-                  <td>
+          <div style={{ 
+            overflowX: 'auto', 
+            overflowY: 'auto',
+            maxHeight: 'calc(100vh - 400px)',
+            position: 'relative',
+            border: '1px solid var(--border)',
+            borderRadius: '12px'
+          }}>
+            <table style={{ width: '100%', minWidth: '100%' }}>
+              <thead>
+                <tr>
+                  <th style={{ width: '40px' }}>
                     <input
                       type="checkbox"
-                      checked={selectedCVs.includes(cv.id)}
-                      onChange={() => handleSelectCV(cv.id)}
+                      checked={selectedCVs.length === cvs.length && cvs.length > 0}
+                      onChange={handleSelectAll}
+                      title="Barchasini tanlash"
                     />
-                  </td>
-                  <td>{cv.id}</td>
-                  <td>{cv.user?.first_name} {cv.user?.last_name}</td>
-                  <td>{cv.user?.phone || '-'}</td>
-                  <td>{cv.user?.email || '-'}</td>
-                  <td>{cv.file_name || (cv.file ? cv.file.split('/').pop() : '-')}</td>
-                  <td>{cv.file_size ? `${(cv.file_size / 1024).toFixed(2)} KB` : '-'}</td>
-                  <td>{cv.uploaded_at ? new Date(cv.uploaded_at).toLocaleDateString('uz-UZ') : '-'}</td>
-                  <td>
-                    <button 
-                      className="btn" 
-                      onClick={() => handleCVClick(cv)}
-                      style={{ padding: '6px 12px', fontSize: '14px' }}
-                    >
-                      Ko'rish
-                    </button>
-                  </td>
+                  </th>
+                  {visibleColumns.id && <th>ID</th>}
+                  {visibleColumns.user && <th>Foydalanuvchi</th>}
+                  {visibleColumns.phone && <th>Telefon</th>}
+                  {visibleColumns.email && <th>Email</th>}
+                  {visibleColumns.fileName && <th>Fayl nomi</th>}
+                  {visibleColumns.fileSize && <th>Fayl hajmi</th>}
+                  {visibleColumns.uploadedAt && <th>Yuklangan</th>}
+                  <th>Harakatlar</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {cvs.map((cv) => (
+                  <tr key={cv.id} style={{ background: selectedCVs.includes(cv.id) ? 'rgba(34, 158, 217, 0.04)' : '' }}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedCVs.includes(cv.id)}
+                        onChange={() => handleSelectCV(cv.id)}
+                      />
+                    </td>
+                    {visibleColumns.id && <td>{cv.id}</td>}
+                    {visibleColumns.user && <td>{cv.user?.first_name} {cv.user?.last_name}</td>}
+                    {visibleColumns.phone && <td>{cv.user?.phone || '-'}</td>}
+                    {visibleColumns.email && <td>{cv.user?.email || '-'}</td>}
+                    {visibleColumns.fileName && <td>{cv.file_name || (cv.file ? cv.file.split('/').pop() : '-')}</td>}
+                    {visibleColumns.fileSize && <td>{cv.file_size ? `${(cv.file_size / 1024).toFixed(2)} KB` : '-'}</td>}
+                    {visibleColumns.uploadedAt && <td>{cv.uploaded_at ? new Date(cv.uploaded_at).toLocaleDateString('uz-UZ') : '-'}</td>}
+                    <td>
+                      <button 
+                        className="btn" 
+                        onClick={() => handleCVClick(cv)}
+                        style={{ padding: '6px 12px', fontSize: '14px' }}
+                      >
+                        <Icon name="eye" size={14} color="currentColor" /> Ko'rish
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           
           {totalPages > 1 && (
             <div style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'center' }}>

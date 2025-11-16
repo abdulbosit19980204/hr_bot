@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import TestDetail from './TestDetail'
+import { Icon } from './Icons'
 import './Dashboard.css'
 
 function TestsList({ apiBaseUrl }) {
@@ -19,6 +20,21 @@ function TestsList({ apiBaseUrl }) {
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingTest, setEditingTest] = useState(null)
   const [importingTest, setImportingTest] = useState(false)
+  const [showColumnSettings, setShowColumnSettings] = useState(false)
+  const [showFilters, setShowFilters] = useState(true)
+  
+  // Column visibility state
+  const [visibleColumns, setVisibleColumns] = useState({
+    id: true,
+    title: true,
+    positions: true,
+    questionsCount: true,
+    timeLimit: true,
+    passingScore: true,
+    maxAttempts: true,
+    status: true,
+    createdAt: true
+  })
 
   useEffect(() => {
     loadPositions()
@@ -336,17 +352,33 @@ function TestsList({ apiBaseUrl }) {
   }
 
   return (
-    <div className="table-card">
+    <div className="table-card" style={{ position: 'relative' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <h3 style={{ margin: 0 }}>Testlar</h3>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn"
+            onClick={() => setShowFilters(!showFilters)}
+            style={{ margin: 0, background: '#6c757d' }}
+            title="Filtrlarni ko'rsatish/yashirish"
+          >
+            <Icon name="filter" size={16} color="white" /> {showFilters ? 'Filtrlarni yashirish' : 'Filtrlarni ko\'rsatish'}
+          </button>
+          <button
+            className="btn"
+            onClick={() => setShowColumnSettings(!showColumnSettings)}
+            style={{ margin: 0, background: '#6c757d', position: 'relative' }}
+            title="Ustunlarni boshqarish"
+          >
+            <Icon name="settings" size={16} color="white" /> Ustunlar
+          </button>
           <button
             className="btn"
             onClick={handleExportExcel}
             style={{ margin: 0, background: '#229ED9' }}
             title="Excel formatida export qilish"
           >
-            ⬇ Excel
+            <Icon name="download" size={16} color="white" /> Excel
           </button>
           <button
             className="btn"
@@ -354,16 +386,16 @@ function TestsList({ apiBaseUrl }) {
             style={{ margin: 0, background: '#6c757d' }}
             title="CSV formatida export qilish"
           >
-            ⬇ CSV
+            <Icon name="download" size={16} color="white" /> CSV
           </button>
           {isSuperuser && (
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+            <>
               <button
                 className="btn"
                 onClick={() => setShowCreateModal(true)}
                 style={{ background: '#28a745', margin: 0 }}
               >
-                + Yangi test qo'shish
+                <Icon name="plus" size={16} color="white" /> Yangi test
               </button>
               <label 
                 className="btn" 
@@ -377,11 +409,31 @@ function TestsList({ apiBaseUrl }) {
                   onChange={handleImportTest}
                   disabled={importingTest}
                 />
-                {importingTest ? '⏳ Import qilinmoqda...' : '📥 Test import qilish'}
+                {importingTest ? (
+                  <>
+                    <Icon name="check" size={16} color="white" /> Import qilinmoqda...
+                  </>
+                ) : (
+                  <>
+                    <Icon name="upload" size={16} color="white" /> Test import
+                  </>
+                )}
               </label>
-            </div>
+            </>
           )}
-          <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px' }}>
+        </div>
+      </div>
+
+      {/* Filters Section - Toggleable */}
+      {showFilters && (
+        <div style={{ 
+          marginBottom: '20px', 
+          padding: '16px', 
+          background: 'var(--bg-tertiary)', 
+          borderRadius: '12px',
+          border: '1px solid var(--border)'
+        }}>
+          <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <input
               type="text"
               className="input"
@@ -435,7 +487,57 @@ function TestsList({ apiBaseUrl }) {
             )}
           </form>
         </div>
-      </div>
+      )}
+
+      {/* Column Settings Dropdown */}
+      {showColumnSettings && (
+        <div style={{
+          position: 'absolute',
+          top: '60px',
+          right: '10px',
+          background: 'white',
+          border: '1px solid #E6E6E6',
+          borderRadius: '12px',
+          boxShadow: '0 8px 16px rgba(0, 0, 0, 0.10)',
+          padding: '16px',
+          zIndex: 100,
+          minWidth: '200px',
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div style={{ marginBottom: '12px', fontWeight: 600, fontSize: '14px', color: '#1A1A1A' }}>
+            Ustunlarni tanlash
+          </div>
+          {Object.entries({
+            id: 'ID',
+            title: 'Test nomi',
+            positions: 'Lavozimlar',
+            questionsCount: 'Savollar soni',
+            timeLimit: 'Vaqt chegarasi',
+            passingScore: 'O\'tish balli',
+            maxAttempts: 'Max urinishlar',
+            status: 'Holat',
+            createdAt: 'Yaratilgan'
+          }).map(([key, label]) => (
+            <label key={key} style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              padding: '8px 0',
+              cursor: 'pointer',
+              fontSize: '14px',
+              color: '#1A1A1A'
+            }}>
+              <input
+                type="checkbox"
+                checked={visibleColumns[key]}
+                onChange={(e) => setVisibleColumns({ ...visibleColumns, [key]: e.target.checked })}
+                style={{ cursor: 'pointer' }}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      )}
 
       {tests.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
@@ -443,75 +545,90 @@ function TestsList({ apiBaseUrl }) {
         </div>
       ) : (
         <>
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Test nomi</th>
-                <th>Lavozimlar</th>
-                <th>Savollar soni</th>
-                <th>Vaqt chegarasi</th>
-                <th>O'tish balli</th>
-                <th>Max urinishlar</th>
-                <th>Holat</th>
-                <th>Yaratilgan</th>
-                <th>Harakatlar</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tests.map((test) => (
-                <tr key={test.id}>
-                  <td>{test.id}</td>
-                  <td>{test.title}</td>
-                  <td>
-                    {test.positions && test.positions.length > 0 ? (
-                      test.positions.map(pos => pos.name).join(', ')
-                    ) : '-'}
-                  </td>
-                  <td>{test.questions_count || 0}</td>
-                  <td>{test.time_limit} daqiqa</td>
-                  <td>{test.passing_score}%</td>
-                  <td>{test.max_attempts || '-'}</td>
-                  <td>
-                    {test.is_active ? (
-                      <span style={{ color: '#28a745' }}>✅ Faol</span>
-                    ) : (
-                      <span style={{ color: '#dc3545' }}>❌ Nofaol</span>
+          <div style={{ 
+            overflowX: 'auto', 
+            overflowY: 'auto',
+            maxHeight: 'calc(100vh - 400px)',
+            position: 'relative',
+            border: '1px solid var(--border)',
+            borderRadius: '12px'
+          }}>
+            <table style={{ width: '100%', minWidth: '100%' }}>
+              <thead>
+                <tr>
+                  {visibleColumns.id && <th>ID</th>}
+                  {visibleColumns.title && <th>Test nomi</th>}
+                  {visibleColumns.positions && <th>Lavozimlar</th>}
+                  {visibleColumns.questionsCount && <th>Savollar soni</th>}
+                  {visibleColumns.timeLimit && <th>Vaqt chegarasi</th>}
+                  {visibleColumns.passingScore && <th>O'tish balli</th>}
+                  {visibleColumns.maxAttempts && <th>Max urinishlar</th>}
+                  {visibleColumns.status && <th>Holat</th>}
+                  {visibleColumns.createdAt && <th>Yaratilgan</th>}
+                  <th>Harakatlar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tests.map((test) => (
+                  <tr key={test.id}>
+                    {visibleColumns.id && <td>{test.id}</td>}
+                    {visibleColumns.title && <td>{test.title}</td>}
+                    {visibleColumns.positions && (
+                      <td>
+                        {test.positions && test.positions.length > 0 ? (
+                          test.positions.map(pos => pos.name).join(', ')
+                        ) : '-'}
+                      </td>
                     )}
-                  </td>
-                  <td>{test.created_at ? new Date(test.created_at).toLocaleDateString('uz-UZ') : '-'}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-                      <span 
-                        onClick={() => handleTestClick(test)}
-                        style={{ fontSize: '18px', cursor: 'pointer', userSelect: 'none', color: '#229ED9' }}
-                        title="Ko'rish"
-                      >
-                        👁
-                      </span>
-                      {isSuperuser && (
-                        <>
-                          <span 
-                            onClick={() => {
-                              setEditingTest(test)
-                              setShowEditModal(true)
-                            }}
-                            style={{ fontSize: '18px', cursor: 'pointer', userSelect: 'none', color: '#ffc107' }}
-                            title="Tahrirlash"
-                          >
-                            ✏
-                          </span>
-                          <span 
-                            onClick={() => {
-                              if (window.confirm(`"${test.title}" testini o'chirishni tasdiqlaysizmi?`)) {
-                                handleDeleteTest(test.id)
-                              }
-                            }}
-                            style={{ fontSize: '18px', cursor: 'pointer', userSelect: 'none', color: '#dc3545' }}
-                            title="O'chirish"
-                          >
-                            🗑
-                          </span>
+                    {visibleColumns.questionsCount && <td>{test.questions_count || 0}</td>}
+                    {visibleColumns.timeLimit && <td>{test.time_limit} daqiqa</td>}
+                    {visibleColumns.passingScore && <td>{test.passing_score}%</td>}
+                    {visibleColumns.maxAttempts && <td>{test.max_attempts || '-'}</td>}
+                    {visibleColumns.status && (
+                      <td>
+                        {test.is_active ? (
+                          <span style={{ color: '#28a745' }}>✅ Faol</span>
+                        ) : (
+                          <span style={{ color: '#dc3545' }}>❌ Nofaol</span>
+                        )}
+                      </td>
+                    )}
+                    {visibleColumns.createdAt && <td>{test.created_at ? new Date(test.created_at).toLocaleDateString('uz-UZ') : '-'}</td>}
+                    <td>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <button
+                          onClick={() => handleTestClick(test)}
+                          className="btn"
+                          style={{ padding: '6px 12px', fontSize: '14px' }}
+                          title="Ko'rish"
+                        >
+                          <Icon name="eye" size={14} color="currentColor" />
+                        </button>
+                        {isSuperuser && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setEditingTest(test)
+                                setShowEditModal(true)
+                              }}
+                              className="btn"
+                              style={{ padding: '6px 12px', fontSize: '14px', background: '#ffc107', color: 'white' }}
+                              title="Tahrirlash"
+                            >
+                              <Icon name="pencil" size={14} color="white" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`"${test.title}" testini o'chirishni tasdiqlaysizmi?`)) {
+                                  handleDeleteTest(test.id)
+                                }
+                              }}
+                              className="btn"
+                              style={{ padding: '6px 12px', fontSize: '14px', background: '#dc3545', color: 'white' }}
+                              title="O'chirish"
+                            >
+                              <Icon name="trash" size={14} color="white" />
+                            </button>
                         </>
                       )}
                     </div>
@@ -520,6 +637,7 @@ function TestsList({ apiBaseUrl }) {
               ))}
             </tbody>
           </table>
+          </div>
           
           {totalPages > 1 && (
             <div style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'center' }}>
