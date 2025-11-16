@@ -100,6 +100,64 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
     }
   }
 
+  const exportQuestions = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      const headers = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      // Load all questions without pagination
+      const response = await axios.get(`${apiBaseUrl}/tests/${test.id}/questions_list/`, {
+        params: { 
+          page: 1,
+          page_size: 10000 // Large number to get all questions
+        },
+        headers
+      })
+      
+      const allQuestions = response.data.results || response.data
+      
+      // Format questions for export
+      const exportData = {
+        test_id: test.id,
+        test_title: test.title,
+        test_description: test.description,
+        export_date: new Date().toISOString(),
+        questions_count: allQuestions.length,
+        questions: allQuestions.map(q => ({
+          id: q.id,
+          text: q.text,
+          order: q.order,
+          options: q.options.map(opt => ({
+            id: opt.id,
+            text: opt.text,
+            is_correct: opt.is_correct,
+            order: opt.order
+          }))
+        }))
+      }
+      
+      // Create and download JSON file
+      const dataStr = JSON.stringify(exportData, null, 2)
+      const dataBlob = new Blob([dataStr], { type: 'application/json' })
+      const url = URL.createObjectURL(dataBlob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `test_${test.id}_questions_${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
+      alert(`Savollar muvaffaqiyatli export qilindi! (${allQuestions.length} ta savol)`)
+    } catch (err) {
+      console.error('Error exporting questions:', err)
+      alert('Savollarni export qilishda xatolik yuz berdi')
+    }
+  }
+
   const loadTestData = async () => {
     try {
       setLoading(true)
