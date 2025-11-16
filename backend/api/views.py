@@ -1744,7 +1744,7 @@ class StatisticsView(APIView):
         ).aggregate(avg=Avg('count'))['avg'] or 0
         
         users_with_multiple_attempts = User.objects.annotate(
-            attempt_count=Count('testresult')
+            attempt_count=Count('test_results')
         ).filter(attempt_count__gt=1).count()
         
         # E. User Engagement
