@@ -14,6 +14,8 @@ function Dashboard({ onLogout, apiBaseUrl }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('statistics')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
   useEffect(() => {
     loadStatistics()
@@ -44,151 +46,113 @@ function Dashboard({ onLogout, apiBaseUrl }) {
     return <div className="error">{error}</div>
   }
 
+  const menuItems = [
+    { id: 'statistics', icon: '📊', label: 'Statistika' },
+    { id: 'results', icon: '📋', label: 'Natijalar' },
+    { id: 'users', icon: '👥', label: 'Foydalanuvchilar' },
+    { id: 'tests', icon: '📝', label: 'Testlar' },
+    { id: 'cvs', icon: '📄', label: 'CV\'lar' },
+    { id: 'notifications', icon: '📬', label: 'Xabarlar' },
+    { id: 'positions', icon: '💼', label: 'Lavozimlar' }
+  ]
+
   return (
-    <div className="container">
-      <div className="header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h1>HR Test Dashboard</h1>
-          <button className="btn" onClick={onLogout}>Chiqish</button>
+    <div className="dashboard-wrapper">
+      {/* Mobile Sidebar Overlay */}
+      {mobileSidebarOpen && (
+        <div 
+          className="mobile-sidebar-overlay"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Navigation */}
+      <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${mobileSidebarOpen ? 'mobile-open' : ''}`}>
+        <div className="sidebar-header">
+          {!sidebarCollapsed && (
+            <div className="sidebar-logo">
+              <h2>Gloriya HR</h2>
+              <span className="sidebar-subtitle">Helper</span>
+            </div>
+          )}
+          <button 
+            className="sidebar-toggle"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            title={sidebarCollapsed ? 'Kengaytirish' : 'Qisqartirish'}
+          >
+            {sidebarCollapsed ? '→' : '←'}
+          </button>
         </div>
-      </div>
 
-      {/* Tab Navigation */}
-      <div style={{ 
-        display: 'flex', 
-        gap: '10px', 
-        marginBottom: '24px',
-        borderBottom: '2px solid #dee2e6'
-      }}>
-        <button
-          className="btn"
-          onClick={() => setActiveTab('statistics')}
-          style={{
-            background: activeTab === 'statistics' ? '#229ED9' : '#f8f9fa',
-            color: activeTab === 'statistics' ? 'white' : '#333',
-            border: 'none',
-            borderRadius: '8px 8px 0 0',
-            padding: '12px 24px',
-            cursor: 'pointer',
-            fontWeight: activeTab === 'statistics' ? '600' : '400'
-          }}
-        >
-          📊 Statistika
-        </button>
-        <button
-          className="btn"
-          onClick={() => setActiveTab('results')}
-          style={{
-            background: activeTab === 'results' ? '#229ED9' : '#f8f9fa',
-            color: activeTab === 'results' ? 'white' : '#333',
-            border: 'none',
-            borderRadius: '8px 8px 0 0',
-            padding: '12px 24px',
-            cursor: 'pointer',
-            fontWeight: activeTab === 'results' ? '600' : '400'
-          }}
-        >
-          📋 Natijalar
-        </button>
-        <button
-          className="btn"
-          onClick={() => setActiveTab('users')}
-          style={{
-            background: activeTab === 'users' ? '#229ED9' : '#f8f9fa',
-            color: activeTab === 'users' ? 'white' : '#333',
-            border: 'none',
-            borderRadius: '8px 8px 0 0',
-            padding: '12px 24px',
-            cursor: 'pointer',
-            fontWeight: activeTab === 'users' ? '600' : '400'
-          }}
-        >
-          👥 Foydalanuvchilar
-        </button>
-        <button
-          className="btn"
-          onClick={() => setActiveTab('tests')}
-          style={{
-            background: activeTab === 'tests' ? '#229ED9' : '#f8f9fa',
-            color: activeTab === 'tests' ? 'white' : '#333',
-            border: 'none',
-            borderRadius: '8px 8px 0 0',
-            padding: '12px 24px',
-            cursor: 'pointer',
-            fontWeight: activeTab === 'tests' ? '600' : '400'
-          }}
-        >
-          📝 Testlar
-        </button>
-        <button
-          className="btn"
-          onClick={() => setActiveTab('cvs')}
-          style={{
-            background: activeTab === 'cvs' ? '#229ED9' : '#f8f9fa',
-            color: activeTab === 'cvs' ? 'white' : '#333',
-            border: 'none',
-            borderRadius: '8px 8px 0 0',
-            padding: '12px 24px',
-            cursor: 'pointer',
-            fontWeight: activeTab === 'cvs' ? '600' : '400'
-          }}
-        >
-          📄 CV'lar
-        </button>
-        <button
-          className="btn"
-          onClick={() => setActiveTab('notifications')}
-          style={{
-            background: activeTab === 'notifications' ? '#229ED9' : '#f8f9fa',
-            color: activeTab === 'notifications' ? 'white' : '#333',
-            border: 'none',
-            borderRadius: '8px 8px 0 0',
-            padding: '12px 24px',
-            cursor: 'pointer',
-            fontWeight: activeTab === 'notifications' ? '600' : '400'
-          }}
-        >
-          📬 Xabarlar
-        </button>
-        <button
-          className="btn"
-          onClick={() => setActiveTab('positions')}
-          style={{
-            background: activeTab === 'positions' ? '#229ED9' : '#f8f9fa',
-            color: activeTab === 'positions' ? 'white' : '#333',
-            border: 'none',
-            borderRadius: '8px 8px 0 0',
-            padding: '12px 24px',
-            cursor: 'pointer',
-            fontWeight: activeTab === 'positions' ? '600' : '400'
-          }}
-        >
-          💼 Lavozimlar
-        </button>
-      </div>
+        <nav className="sidebar-nav">
+          {menuItems.map(item => (
+            <button
+              key={item.id}
+              className={`sidebar-item ${activeTab === item.id ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab(item.id)
+                setMobileSidebarOpen(false)
+              }}
+              title={sidebarCollapsed ? item.label : ''}
+            >
+              <span className="sidebar-icon">{item.icon}</span>
+              {!sidebarCollapsed && <span className="sidebar-label">{item.label}</span>}
+            </button>
+          ))}
+        </nav>
 
-      {/* Tab Content */}
-      {activeTab === 'statistics' && stats && (
-        <Statistics stats={stats} />
-      )}
-      {activeTab === 'results' && (
-        <ResultsTable apiBaseUrl={apiBaseUrl} />
-      )}
-      {activeTab === 'users' && (
-        <UsersList apiBaseUrl={apiBaseUrl} />
-      )}
-      {activeTab === 'tests' && (
-        <TestsList apiBaseUrl={apiBaseUrl} />
-      )}
-      {activeTab === 'cvs' && (
-        <CVsList apiBaseUrl={apiBaseUrl} />
-      )}
-      {activeTab === 'notifications' && (
-        <NotificationsList apiBaseUrl={apiBaseUrl} />
-      )}
-      {activeTab === 'positions' && (
-        <PositionsList apiBaseUrl={apiBaseUrl} />
-      )}
+        <div className="sidebar-footer">
+          <button 
+            className="sidebar-item sidebar-logout"
+            onClick={onLogout}
+            title={sidebarCollapsed ? 'Chiqish' : ''}
+          >
+            <span className="sidebar-icon">🚪</span>
+            {!sidebarCollapsed && <span className="sidebar-label">Chiqish</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <div className="dashboard-main">
+        {/* Top Header */}
+        <header className="dashboard-header">
+          <button 
+            className="mobile-menu-toggle"
+            onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+          >
+            ☰
+          </button>
+          <h1 className="dashboard-title">
+            {menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
+          </h1>
+        </header>
+
+        {/* Content Area */}
+        <main className="dashboard-content">
+          {activeTab === 'statistics' && stats && (
+            <Statistics stats={stats} />
+          )}
+          {activeTab === 'results' && (
+            <ResultsTable apiBaseUrl={apiBaseUrl} />
+          )}
+          {activeTab === 'users' && (
+            <UsersList apiBaseUrl={apiBaseUrl} />
+          )}
+          {activeTab === 'tests' && (
+            <TestsList apiBaseUrl={apiBaseUrl} />
+          )}
+          {activeTab === 'cvs' && (
+            <CVsList apiBaseUrl={apiBaseUrl} />
+          )}
+          {activeTab === 'notifications' && (
+            <NotificationsList apiBaseUrl={apiBaseUrl} />
+          )}
+          {activeTab === 'positions' && (
+            <PositionsList apiBaseUrl={apiBaseUrl} />
+          )}
+        </main>
+      </div>
     </div>
   )
 }
