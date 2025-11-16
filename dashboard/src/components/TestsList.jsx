@@ -107,9 +107,16 @@ function TestsList({ apiBaseUrl }) {
       const params = {
         page,
         search: searchTerm || undefined,
-        positions: selectedPosition || undefined,
-        is_active: statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined
+        positions: selectedPosition || undefined
       }
+      
+      // Only add is_active filter if not 'all'
+      if (statusFilter === 'active') {
+        params.is_active = true
+      } else if (statusFilter === 'inactive') {
+        params.is_active = false
+      }
+      // If statusFilter is 'all', don't add is_active param at all
       
       // Remove undefined params
       Object.keys(params).forEach(key => params[key] === undefined && delete params[key])
@@ -301,9 +308,10 @@ function TestsList({ apiBaseUrl }) {
                       <button 
                         className="btn" 
                         onClick={() => handleTestClick(test)}
-                        style={{ padding: '6px 12px', fontSize: '14px' }}
+                        style={{ padding: '8px', fontSize: '16px', minWidth: '36px' }}
+                        title="Ko'rish"
                       >
-                        Ko'rish
+                        👁️
                       </button>
                       {isSuperuser && (
                         <>
@@ -313,9 +321,10 @@ function TestsList({ apiBaseUrl }) {
                               setEditingTest(test)
                               setShowEditModal(true)
                             }}
-                            style={{ padding: '6px 12px', fontSize: '14px', background: '#ffc107', color: '#000' }}
+                            style={{ padding: '8px', fontSize: '16px', background: '#ffc107', color: '#000', minWidth: '36px' }}
+                            title="Tahrirlash"
                           >
-                            Tahrirlash
+                            ✏️
                           </button>
                           <button 
                             className="btn" 
@@ -324,9 +333,10 @@ function TestsList({ apiBaseUrl }) {
                                 handleDeleteTest(test.id)
                               }
                             }}
-                            style={{ padding: '6px 12px', fontSize: '14px', background: '#dc3545' }}
+                            style={{ padding: '8px', fontSize: '16px', background: '#dc3545', minWidth: '36px' }}
+                            title="O'chirish"
                           >
-                            O'chirish
+                            🗑️
                           </button>
                         </>
                       )}
@@ -686,18 +696,20 @@ function EditTestModal({ apiBaseUrl, test, positions, onClose, onSuccess }) {
               type="button"
               className="btn"
               onClick={onClose}
-              style={{ background: '#6c757d' }}
+              style={{ background: '#6c757d', padding: '10px 20px', fontSize: '18px' }}
               disabled={saving}
+              title="Bekor qilish"
             >
-              Bekor qilish
+              ❌
             </button>
             <button
               type="submit"
               className="btn"
               disabled={saving}
-              style={{ background: '#ffc107', color: '#000' }}
+              style={{ background: '#ffc107', color: '#000', padding: '10px 20px', fontSize: '18px' }}
+              title={saving ? 'Saqlanmoqda...' : 'Saqlash'}
             >
-              {saving ? 'Saqlanmoqda...' : 'Saqlash'}
+              {saving ? '⏳' : '💾'}
             </button>
           </div>
         </form>
@@ -995,18 +1007,20 @@ function CreateTestModal({ apiBaseUrl, positions, onClose, onSuccess }) {
               type="button"
               className="btn"
               onClick={onClose}
-              style={{ background: '#6c757d' }}
+              style={{ background: '#6c757d', padding: '10px 20px', fontSize: '18px' }}
               disabled={saving}
+              title="Bekor qilish"
             >
-              Bekor qilish
+              ❌
             </button>
             <button
               type="submit"
               className="btn"
               disabled={saving}
-              style={{ background: '#28a745' }}
+              style={{ background: '#28a745', padding: '10px 20px', fontSize: '18px' }}
+              title={saving ? 'Yaratilmoqda...' : 'Yaratish'}
             >
-              {saving ? 'Yaratilmoqda...' : 'Yaratish'}
+              {saving ? '⏳' : '✅'}
             </button>
           </div>
         </form>
