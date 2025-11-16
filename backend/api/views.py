@@ -1029,6 +1029,12 @@ class UserViewSet(viewsets.ModelViewSet):
             return UserCreateSerializer
         return UserSerializer
 
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def me(self, request):
+        """Get current authenticated user"""
+        serializer = UserSerializer(request.user)
+        return Response(serializer.data)
+    
     @action(detail=False, methods=['post'])
     def telegram_auth(self, request):
         """Authenticate user by Telegram ID and update Telegram info"""
@@ -1653,53 +1659,201 @@ class TestResultViewSet(viewsets.ModelViewSet):
 
 
 class StatisticsView(APIView):
-    """Statistics view - AllowAny permission for frontend access"""
-    permission_classes = [AllowAny]  # Frontend uchun ochiq qildik
-    authentication_classes = []  # Authentication talab qilmaymiz
+    """Statistics view - Production-safe aggregated statistics"""
+    permission_classes = [IsAuthenticated]  # Production'da authentication talab qilamiz
+    authentication_classes = []  # Allow token authentication
 
     def get(self, request):
-        # Development uchun authentication talab qilmaymiz
-        # Production'da IsAuthenticated va is_staff tekshiruvini qo'shing
-
-        # Total tests taken
-        total_tests = TestResult.objects.count()
-
-        # Average score
-        avg_score = TestResult.objects.aggregate(avg=Avg('score'))['avg'] or 0
-
-        # Total users
-        total_users = User.objects.count()
-
-        # Tests by user position (user lavozimi bo'yicha)
-        tests_by_position = TestResult.objects.values('user__position__name').annotate(
-            count=Count('id')
-        ).order_by('-count')[:10]
-
-        # Best results
-        best_results = TestResult.objects.select_related('user', 'test').order_by('-score')[:10]
-        best_results_data = TestResultSerializer(best_results, many=True).data
-
-        # Recent results
-        recent_results = TestResult.objects.select_related('user', 'test').order_by('-completed_at')[:10]
-        recent_results_data = TestResultSerializer(recent_results, many=True).data
-
-        # Tests taken today
         today = timezone.now().date()
+        now = timezone.now()
+        week_ago = now - timedelta(days=7)
+        month_ago = now - timedelta(days=30)
+        
+        # A. Real-time stats
         tests_today = TestResult.objects.filter(completed_at__date=today).count()
-
-        # Tests taken this week
-        week_ago = timezone.now() - timedelta(days=7)
-        tests_this_week = TestResult.objects.filter(completed_at__gte=week_ago).count()
+        new_users_today = User.objects.filter(date_joined__date=today).count()
+        cv_uploads_today = CV.objects.filter(uploaded_at__date=today).count()
+        active_users = User.objects.filter(is_active=True, is_blocked=False).count()
+        blocked_users = User.objects.filter(is_blocked=True).count()
+        
+        # B. Trend Charts - Daily test completions (7 days)
+        daily_tests = []
+        for i in range(6, -1, -1):
+            date = today - timedelta(days=i)
+            count = TestResult.objects.filter(completed_at__date=date).count()
+            daily_tests.append({'date': date.strftime('%Y-%m-%d'), 'count': count})
+        
+        # User growth (daily, weekly, monthly)
+        user_growth = {
+            'today': new_users_today,
+            'this_week': User.objects.filter(date_joined__gte=week_ago).count(),
+            'this_month': User.objects.filter(date_joined__gte=month_ago).count()
+        }
+        
+        # CV upload trends
+        cv_trends = {
+            'today': cv_uploads_today,
+            'this_week': CV.objects.filter(uploaded_at__gte=week_ago).count(),
+            'this_month': CV.objects.filter(uploaded_at__gte=month_ago).count()
+        }
+        
+        # C. Comparison Stats
+        # Trial vs Real test counts and average scores
+        trial_tests = TestResult.objects.filter(test__is_trial=True)
+        real_tests = TestResult.objects.filter(test__is_trial=False)
+        trial_count = trial_tests.count()
+        real_count = real_tests.count()
+        trial_avg_score = trial_tests.aggregate(avg=Avg('score'))['avg'] or 0
+        real_avg_score = real_tests.aggregate(avg=Avg('score'))['avg'] or 0
+        
+        # Tests by position (aggregated, no sensitive data)
+        tests_by_position = TestResult.objects.values('test__positions__name').annotate(
+            count=Count('id'),
+            avg_score=Avg('score')
+        ).order_by('-count')[:10]
+        
+        # Test pass rates
+        total_results = TestResult.objects.count()
+        passed_results = TestResult.objects.filter(score__gte=models.F('test__passing_score')).count()
+        pass_rate = (passed_results / total_results * 100) if total_results > 0 else 0
+        
+        # Top 10 hardest/easiest tests (by average score)
+        test_stats = TestResult.objects.values('test__id', 'test__title').annotate(
+            avg_score=Avg('score'),
+            count=Count('id')
+        ).filter(count__gte=5).order_by('avg_score')[:10]  # Hardest
+        hardest_tests = list(test_stats)
+        
+        test_stats_easy = TestResult.objects.values('test__id', 'test__title').annotate(
+            avg_score=Avg('score'),
+            count=Count('id')
+        ).filter(count__gte=5).order_by('-avg_score')[:10]  # Easiest
+        easiest_tests = list(test_stats_easy)
+        
+        # D. Performance Metrics
+        avg_time_per_test = TestResult.objects.aggregate(
+            avg=Avg('time_taken')
+        )['avg'] or 0
+        
+        fastest_completion = TestResult.objects.order_by('time_taken').first()
+        slowest_completion = TestResult.objects.order_by('-time_taken').first()
+        
+        # Average attempts per user
+        attempts_per_user = TestResult.objects.values('user__id').annotate(
+            count=Count('id')
+        ).aggregate(avg=Avg('count'))['avg'] or 0
+        
+        users_with_multiple_attempts = User.objects.annotate(
+            attempt_count=Count('testresult')
+        ).filter(attempt_count__gt=1).count()
+        
+        # E. User Engagement
+        trial_participation = trial_count
+        real_participation = real_count
+        
+        # F. CV Statistics
+        total_cvs = CV.objects.count()
+        cvs_this_week = CV.objects.filter(uploaded_at__gte=week_ago).count()
+        avg_file_size = CV.objects.aggregate(avg=Avg('file_size'))['avg'] or 0
+        users_with_cv = User.objects.filter(cv__isnull=False).distinct().count()
+        users_passed_and_cv = User.objects.filter(
+            testresult__score__gte=models.F('testresult__test__passing_score'),
+            cv__isnull=False
+        ).distinct().count()
+        
+        # G. Notifications
+        total_notifications = Notification.objects.count()
+        sent_notifications = Notification.objects.exclude(sent_at__isnull=True).count()
+        draft_notifications = Notification.objects.filter(sent_at__isnull=True).count()
+        total_successful_sends = Notification.objects.aggregate(
+            total=Count('id'),
+            successful=Count('successful_sends')
+        )
+        success_rate = (total_successful_sends['successful'] / total_successful_sends['total'] * 100) if total_successful_sends['total'] > 0 else 0
+        
+        # Top notification errors (by type) - aggregated
+        from users.models import NotificationError
+        top_errors = NotificationError.objects.values('error_type').annotate(
+            count=Count('id')
+        ).order_by('-count')[:5]
+        
+        # Overall stats
+        total_tests = TestResult.objects.count()
+        avg_score = TestResult.objects.aggregate(avg=Avg('score'))['avg'] or 0
+        total_users = User.objects.count()
+        
+        # Best results (top 10, aggregated data only)
+        best_results = TestResult.objects.select_related('user', 'test').order_by('-score')[:10]
+        best_results_data = [{
+            'id': r.id,
+            'user_name': f"{r.user.first_name} {r.user.last_name}" if r.user else 'Noma\'lum',
+            'test_title': r.test.title if r.test else 'Noma\'lum',
+            'score': r.score,
+            'correct_answers': r.correct_answers,
+            'total_questions': r.total_questions,
+            'completed_at': r.completed_at.isoformat() if r.completed_at else None
+        } for r in best_results]
 
         return Response({
+            # A. Real-time stats
+            'tests_today': tests_today,
+            'new_users_today': new_users_today,
+            'cv_uploads_today': cv_uploads_today,
+            'active_users': active_users,
+            'blocked_users': blocked_users,
+            
+            # B. Trend Charts
+            'daily_test_completions': daily_tests,
+            'user_growth': user_growth,
+            'cv_upload_trends': cv_trends,
+            
+            # C. Comparison Stats
+            'trial_vs_real': {
+                'trial_count': trial_count,
+                'real_count': real_count,
+                'trial_avg_score': round(trial_avg_score, 2),
+                'real_avg_score': round(real_avg_score, 2)
+            },
+            'tests_by_position': list(tests_by_position),
+            'pass_rate': round(pass_rate, 2),
+            'hardest_tests': hardest_tests,
+            'easiest_tests': easiest_tests,
+            
+            # D. Performance Metrics
+            'avg_time_per_test': round(avg_time_per_test, 2) if avg_time_per_test else 0,
+            'fastest_completion': fastest_completion.time_taken if fastest_completion else None,
+            'slowest_completion': slowest_completion.time_taken if slowest_completion else None,
+            'avg_attempts_per_user': round(attempts_per_user, 2),
+            'users_with_multiple_attempts': users_with_multiple_attempts,
+            
+            # E. User Engagement
+            'trial_participation': trial_participation,
+            'real_participation': real_participation,
+            
+            # F. CV Statistics
+            'total_cvs': total_cvs,
+            'cvs_this_week': cvs_this_week,
+            'avg_file_size': round(avg_file_size / 1024, 2) if avg_file_size else 0,  # KB
+            'users_with_cv': users_with_cv,
+            'users_passed_and_cv': users_passed_and_cv,
+            
+            # G. Notifications
+            'total_notifications': total_notifications,
+            'sent_notifications': sent_notifications,
+            'draft_notifications': draft_notifications,
+            'total_successful_sends': total_successful_sends.get('successful', 0),
+            'success_rate': round(success_rate, 2),
+            'top_notification_errors': list(top_errors),
+            
+            # Overall stats (backward compatibility)
             'total_tests': total_tests,
             'avg_score': round(avg_score, 2),
             'total_users': total_users,
-            'tests_today': tests_today,
-            'tests_this_week': tests_this_week,
-            'tests_by_position': list(tests_by_position),
+            'tests_this_week': TestResult.objects.filter(completed_at__gte=week_ago).count(),
+            'tests_by_position_old': list(TestResult.objects.values('user__position__name').annotate(
+                count=Count('id')
+            ).order_by('-count')[:10]),
             'best_results': best_results_data,
-            'recent_results': recent_results_data,
         })
 
 

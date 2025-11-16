@@ -18,25 +18,61 @@ function Dashboard({ onLogout, apiBaseUrl }) {
   const [activeTab, setActiveTab] = useState('statistics')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [currentUser, setCurrentUser] = useState(null)
 
   useEffect(() => {
     loadStatistics()
+    loadCurrentUser()
   }, [])
 
   const loadStatistics = async () => {
     try {
-      // Statistics endpoint AllowAny permission ga ega, shuning uchun token talab qilmaydi
-      const response = await axios.get(`${apiBaseUrl}/statistics/`, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      })
+      const token = localStorage.getItem('access_token')
+      const headers = {
+        'Content-Type': 'application/json'
+      }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      const response = await axios.get(`${apiBaseUrl}/statistics/`, { headers })
       setStats(response.data)
       setLoading(false)
     } catch (err) {
       console.error('Statistics load error:', err)
       setError(err.response?.data?.error || err.message || 'Xatolik yuz berdi')
       setLoading(false)
+    }
+  }
+
+  const loadCurrentUser = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) return
+      
+      const response = await axios.get(`${apiBaseUrl}/users/me/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      setCurrentUser(response.data)
+    } catch (err) {
+      console.error('Error loading current user:', err)
+      // If endpoint doesn't exist, try to get from users list
+      try {
+        const token = localStorage.getItem('access_token')
+        const response = await axios.get(`${apiBaseUrl}/users/`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          params: { page_size: 1 }
+        })
+        // This is a workaround - ideally we should have /users/me/ endpoint
+        if (response.data.results && response.data.results.length > 0) {
+          setCurrentUser(response.data.results[0])
+        }
+      } catch (err2) {
+        console.error('Error loading user from users list:', err2)
+      }
     }
   }
 
@@ -123,15 +159,41 @@ function Dashboard({ onLogout, apiBaseUrl }) {
       <div className="dashboard-main">
         {/* Top Header */}
         <header className="dashboard-header">
-          <button 
-            className="mobile-menu-toggle"
-            onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
-          >
-            <Icon name="menu" size={20} color="currentColor" />
-          </button>
-          <h1 className="dashboard-title">
-            {menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <button 
+              className="mobile-menu-toggle"
+              onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+            >
+              <Icon name="menu" size={20} color="currentColor" />
+            </button>
+            <h1 className="dashboard-title">
+              {menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}
+            </h1>
+          </div>
+          {currentUser && (
+            <div className="dashboard-user-info">
+              <div className="user-info-text">
+                <div className="user-name">
+                  {currentUser.first_name} {currentUser.last_name}
+                </div>
+                {currentUser.position && (
+                  <div className="user-position">{currentUser.position.name}</div>
+                )}
+              </div>
+              {stats && (
+                <div className="quick-stats-badges">
+                  <span className="stat-badge" title="Bugun testlar">
+                    <Icon name="clipboard-check" size={14} color="currentColor" />
+                    {stats.tests_today || 0}
+                  </span>
+                  <span className="stat-badge" title="Faol foydalanuvchilar">
+                    <Icon name="users" size={14} color="currentColor" />
+                    {stats.active_users || 0}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </header>
 
         {/* Content Area */}
