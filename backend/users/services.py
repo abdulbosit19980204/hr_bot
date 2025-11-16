@@ -110,7 +110,7 @@ async def send_telegram_message_async(telegram_id, message_text, parse_mode='HTM
                 if response.status == 200:
                     result = await response.json()
                     if result.get('ok'):
-                        logger.info(f"✅ Message sent successfully to telegram_id: {telegram_id}")
+                        logger.info(f"Message sent successfully to telegram_id: {telegram_id}")
                         return True, None, None
                     else:
                         error_desc = result.get('description', 'Unknown error')
