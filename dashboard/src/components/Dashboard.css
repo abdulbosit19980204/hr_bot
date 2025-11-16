@@ -650,7 +650,6 @@ table thead {
   position: sticky;
   top: 0;
   z-index: 10;
-  z-index: 10;
 }
 
 table thead tr:first-child th:first-child {
