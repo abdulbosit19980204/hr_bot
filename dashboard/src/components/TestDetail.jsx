@@ -5,6 +5,8 @@ import './Dashboard.css'
 function TestDetail({ test, apiBaseUrl, onBack }) {
   const [testResults, setTestResults] = useState([])
   const [statistics, setStatistics] = useState(null)
+  const [testDetails, setTestDetails] = useState(null)
+  const [showQuestions, setShowQuestions] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -21,6 +23,10 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
         headers['Authorization'] = `Bearer ${token}`
       }
 
+      // Load full test details with questions
+      const testResponse = await axios.get(`${apiBaseUrl}/tests/${test.id}/`, { headers })
+      setTestDetails(testResponse.data)
+      
       // Load test results for this test
       const resultsResponse = await axios.get(`${apiBaseUrl}/results/`, {
         params: { test: test.id },
@@ -171,6 +177,94 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
           </div>
         </div>
       )}
+
+      {/* Test Questions */}
+      <div className="table-card" style={{ marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h3 style={{ margin: 0 }}>Test savollari ({testDetails?.questions?.length || 0})</h3>
+          <button 
+            className="btn" 
+            onClick={() => setShowQuestions(!showQuestions)}
+            style={{ background: showQuestions ? '#6c757d' : '#229ED9' }}
+          >
+            {showQuestions ? 'Yashirish' : 'Ko\'rsatish'}
+          </button>
+        </div>
+        
+        {showQuestions && testDetails?.questions && (
+          <div>
+            {testDetails.questions.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                Bu testda savollar topilmadi
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {testDetails.questions
+                  .sort((a, b) => (a.order || 0) - (b.order || 0))
+                  .map((question, index) => (
+                  <div 
+                    key={question.id} 
+                    style={{ 
+                      border: '1px solid #e0e0e0', 
+                      borderRadius: '8px', 
+                      padding: '20px',
+                      background: '#fafafa'
+                    }}
+                  >
+                    <div style={{ marginBottom: '16px' }}>
+                      <strong style={{ fontSize: '16px', color: '#333' }}>
+                        {index + 1}. {question.text}
+                      </strong>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {question.options && question.options.length > 0 ? (
+                        question.options
+                          .sort((a, b) => (a.order || 0) - (b.order || 0))
+                          .map((option, optIndex) => (
+                          <div 
+                            key={option.id}
+                            style={{
+                              padding: '12px',
+                              borderRadius: '6px',
+                              background: option.is_correct ? '#d4edda' : '#fff',
+                              border: option.is_correct ? '2px solid #28a745' : '1px solid #ddd',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px'
+                            }}
+                          >
+                            <span style={{ 
+                              fontWeight: '600',
+                              color: option.is_correct ? '#28a745' : '#666',
+                              minWidth: '20px'
+                            }}>
+                              {String.fromCharCode(65 + optIndex)}.
+                            </span>
+                            <span style={{ flex: 1 }}>{option.text}</span>
+                            {option.is_correct && (
+                              <span style={{ 
+                                color: '#28a745', 
+                                fontWeight: '600',
+                                fontSize: '14px'
+                              }}>
+                                ✓ To'g'ri javob
+                              </span>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ color: '#999', fontStyle: 'italic' }}>
+                          Javob variantlari topilmadi
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Test Results */}
       <div className="table-card">
