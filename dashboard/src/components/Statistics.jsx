@@ -2,7 +2,8 @@ import React from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 
 function Statistics({ stats }) {
-  const COLORS = ['#229ED9', '#28a745', '#ffc107', '#dc3545', '#6c757d', '#17a2b8', '#6f42c1', '#e83e8c']
+  // Modern premium color palette
+  const COLORS = ['#229ED9', '#2ECC71', '#F1C40F', '#E74C3C', '#3498DB', '#9B59B6', '#1ABC9C', '#E67E22']
 
   const positionData = stats.tests_by_position?.map(item => ({
     name: item.user__position__name || 'Noma\'lum',
@@ -44,7 +45,7 @@ function Statistics({ stats }) {
               <YAxis />
               <Tooltip />
               <Legend />
-              <Bar dataKey="value" fill="#229ED9" />
+              <Bar dataKey="value" fill="#229ED9" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
