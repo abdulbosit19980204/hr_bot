@@ -20,6 +20,20 @@ function ResultsTable({ apiBaseUrl }) {
   const [notificationMessage, setNotificationMessage] = useState('')
   const [notificationType, setNotificationType] = useState('interview')
   const [sendingNotification, setSendingNotification] = useState(false)
+  const [showColumnSettings, setShowColumnSettings] = useState(false)
+  
+  // Column visibility state
+  const [visibleColumns, setVisibleColumns] = useState({
+    user: true,
+    email: true,
+    phone: true,
+    position: true,
+    test: true,
+    score: true,
+    correctAnswers: true,
+    status: true,
+    date: true
+  })
 
   useEffect(() => {
     loadTests()
@@ -363,7 +377,7 @@ function ResultsTable({ apiBaseUrl }) {
   }
 
   return (
-    <div className="table-card">
+    <div className="table-card" style={{ position: 'relative' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>Barcha natijalar</h3>
@@ -380,6 +394,14 @@ function ResultsTable({ apiBaseUrl }) {
           )}
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn"
+            onClick={() => setShowColumnSettings(!showColumnSettings)}
+            style={{ margin: 0, background: '#6c757d', position: 'relative' }}
+            title="Ustunlarni boshqarish"
+          >
+            ⚙️ Ustunlar
+          </button>
           {selectedCandidates.size > 0 && (
             <button
               className="btn"
@@ -493,64 +515,118 @@ function ResultsTable({ apiBaseUrl }) {
         </div>
       </div>
 
+      {/* Column Settings Dropdown */}
+      {showColumnSettings && (
+        <div style={{
+          position: 'absolute',
+          top: '60px',
+          right: '10px',
+          background: 'white',
+          border: '1px solid #E6E6E6',
+          borderRadius: '12px',
+          boxShadow: '0 8px 16px rgba(0, 0, 0, 0.10)',
+          padding: '16px',
+          zIndex: 100,
+          minWidth: '200px',
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div style={{ marginBottom: '12px', fontWeight: 600, fontSize: '14px', color: '#1A1A1A' }}>
+            Ustunlarni tanlash
+          </div>
+          {Object.entries({
+            user: 'Foydalanuvchi',
+            email: 'Email',
+            phone: 'Telefon',
+            position: 'Lavozim',
+            test: 'Test',
+            score: 'Ball',
+            correctAnswers: 'To\'g\'ri javoblar',
+            status: 'Status',
+            date: 'Sana'
+          }).map(([key, label]) => (
+            <label key={key} style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              padding: '8px 0',
+              cursor: 'pointer',
+              fontSize: '14px',
+              color: '#1A1A1A'
+            }}>
+              <input
+                type="checkbox"
+                checked={visibleColumns[key]}
+                onChange={(e) => setVisibleColumns({ ...visibleColumns, [key]: e.target.checked })}
+                style={{ cursor: 'pointer' }}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      )}
+
       {filteredResults.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
           Natijalar topilmadi
         </div>
       ) : (
         <>
-          <table>
-            <thead>
-              <tr>
-                <th>
-                  <input
-                    type="checkbox"
-                    checked={selectedCandidates.size === filteredResults.length && filteredResults.length > 0}
-                    onChange={handleSelectAll}
-                    style={{ cursor: 'pointer' }}
-                  />
-                </th>
-                <th>Foydalanuvchi</th>
-                <th>Email</th>
-                <th>Telefon</th>
-                <th>Lavozim</th>
-                <th>Test</th>
-                <th>Ball</th>
-                <th>To'g'ri javoblar</th>
-                <th>Status</th>
-                <th>Sana</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredResults.map((result) => (
-                <tr key={result.id} style={{ background: selectedCandidates.has(result.id) ? '#e7f3ff' : '' }}>
-                  <td>
+          <div style={{ overflowX: 'auto', position: 'relative' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>
                     <input
                       type="checkbox"
-                      checked={selectedCandidates.has(result.id)}
-                      onChange={() => handleSelectCandidate(result.id)}
+                      checked={selectedCandidates.size === filteredResults.length && filteredResults.length > 0}
+                      onChange={handleSelectAll}
                       style={{ cursor: 'pointer' }}
                     />
-                  </td>
-                  <td>{result.user?.first_name} {result.user?.last_name}</td>
-                  <td>{result.user?.email || '-'}</td>
-                  <td>{result.user?.phone || '-'}</td>
-                  <td>{result.user?.position?.name || result.user?.position || '-'}</td>
-                  <td>{result.test?.title}</td>
-                  <td>{result.score}%</td>
-                  <td>{result.correct_answers} / {result.total_questions}</td>
-                  <td>
-                    {result.is_passed ? (
-                      <span style={{ color: '#28a745' }}>✅ O'tdi</span>
-                    ) : (
-                      <span style={{ color: '#dc3545' }}>❌ O'tmadi</span>
-                    )}
-                  </td>
-                  <td>{new Date(result.completed_at).toLocaleDateString()}</td>
+                  </th>
+                  {visibleColumns.user && <th>Foydalanuvchi</th>}
+                  {visibleColumns.email && <th>Email</th>}
+                  {visibleColumns.phone && <th>Telefon</th>}
+                  {visibleColumns.position && <th>Lavozim</th>}
+                  {visibleColumns.test && <th>Test</th>}
+                  {visibleColumns.score && <th>Ball</th>}
+                  {visibleColumns.correctAnswers && <th>To'g'ri javoblar</th>}
+                  {visibleColumns.status && <th>Status</th>}
+                  {visibleColumns.date && <th>Sana</th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredResults.map((result) => (
+                  <tr key={result.id} style={{ background: selectedCandidates.has(result.id) ? 'rgba(34, 158, 217, 0.04)' : '' }}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedCandidates.has(result.id)}
+                        onChange={() => handleSelectCandidate(result.id)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    </td>
+                    {visibleColumns.user && <td>{result.user?.first_name} {result.user?.last_name}</td>}
+                    {visibleColumns.email && <td>{result.user?.email || '-'}</td>}
+                    {visibleColumns.phone && <td>{result.user?.phone || '-'}</td>}
+                    {visibleColumns.position && <td>{result.user?.position?.name || result.user?.position || '-'}</td>}
+                    {visibleColumns.test && <td>{result.test?.title}</td>}
+                    {visibleColumns.score && <td>{result.score}%</td>}
+                    {visibleColumns.correctAnswers && <td>{result.correct_answers} / {result.total_questions}</td>}
+                    {visibleColumns.status && (
+                      <td>
+                        {result.is_passed ? (
+                          <span style={{ color: '#28a745' }}>✅ O'tdi</span>
+                        ) : (
+                          <span style={{ color: '#dc3545' }}>❌ O'tmadi</span>
+                        )}
+                      </td>
+                    )}
+                    {visibleColumns.date && <td>{new Date(result.completed_at).toLocaleDateString()}</td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           
           {totalPages > 1 && (
             <div style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'center' }}>
