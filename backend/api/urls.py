@@ -4,7 +4,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import (
     TestViewSet, QuestionViewSet, UserViewSet,
     CVViewSet, TestResultViewSet, StatisticsView, PositionViewSet,
-    NotificationView
+    NotificationView, NotificationViewSet
 )
 
 router = DefaultRouter()
@@ -14,6 +14,7 @@ router.register(r'questions', QuestionViewSet, basename='question')
 router.register(r'users', UserViewSet, basename='user')
 router.register(r'cvs', CVViewSet, basename='cv')
 router.register(r'results', TestResultViewSet, basename='result')
+router.register(r'notifications', NotificationViewSet, basename='notification')
 
 urlpatterns = [
     path('', include(router.urls)),

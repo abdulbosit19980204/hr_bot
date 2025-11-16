@@ -5,6 +5,7 @@ import ResultsTable from './ResultsTable'
 import UsersList from './UsersList'
 import TestsList from './TestsList'
 import CVsList from './CVsList'
+import NotificationsList from './NotificationsList'
 import './Dashboard.css'
 
 function Dashboard({ onLogout, apiBaseUrl }) {
@@ -133,6 +134,21 @@ function Dashboard({ onLogout, apiBaseUrl }) {
         >
           📄 CV'lar
         </button>
+        <button
+          className="btn"
+          onClick={() => setActiveTab('notifications')}
+          style={{
+            background: activeTab === 'notifications' ? '#229ED9' : '#f8f9fa',
+            color: activeTab === 'notifications' ? 'white' : '#333',
+            border: 'none',
+            borderRadius: '8px 8px 0 0',
+            padding: '12px 24px',
+            cursor: 'pointer',
+            fontWeight: activeTab === 'notifications' ? '600' : '400'
+          }}
+        >
+          📬 Xabarlar
+        </button>
       </div>
 
       {/* Tab Content */}
@@ -150,6 +166,9 @@ function Dashboard({ onLogout, apiBaseUrl }) {
       )}
       {activeTab === 'cvs' && (
         <CVsList apiBaseUrl={apiBaseUrl} />
+      )}
+      {activeTab === 'notifications' && (
+        <NotificationsList apiBaseUrl={apiBaseUrl} />
       )}
     </div>
   )

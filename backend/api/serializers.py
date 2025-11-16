@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from users.models import CV, Position, TelegramProfile
+from users.models import CV, Position, TelegramProfile, Notification, NotificationError
 from tests.models import Test, Question, AnswerOption, TestResult, UserAnswer
 
 User = get_user_model()
@@ -532,4 +532,44 @@ class TestResultCreateSerializer(serializers.Serializer):
                 user.save()
 
         return result
+
+
+class NotificationErrorSerializer(serializers.ModelSerializer):
+    """NotificationError serializer"""
+    user = UserSerializer(read_only=True)
+    
+    class Meta:
+        model = NotificationError
+        fields = ['id', 'user', 'telegram_id', 'error_message', 'error_type', 'created_at']
+        read_only_fields = ['created_at']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    """Notification serializer"""
+    created_by = UserSerializer(read_only=True)
+    recipients = UserSerializer(many=True, read_only=True)
+    recipients_count = serializers.SerializerMethodField()
+    errors_count = serializers.SerializerMethodField()
+    errors = NotificationErrorSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Notification
+        fields = [
+            'id', 'title', 'message', 'recipients', 'recipients_count',
+            'send_to_all', 'sent_at', 'created_by', 'created_at', 'updated_at',
+            'total_recipients', 'successful_sends', 'failed_sends',
+            'errors_count', 'errors'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'sent_at', 'total_recipients', 
+                           'successful_sends', 'failed_sends']
+    
+    def get_recipients_count(self, obj):
+        """Get recipients count"""
+        if obj.send_to_all:
+            return User.objects.filter(telegram_id__isnull=False).count()
+        return obj.recipients.count()
+    
+    def get_errors_count(self, obj):
+        """Get errors count"""
+        return obj.errors.count()
 

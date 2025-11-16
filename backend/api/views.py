@@ -27,7 +27,8 @@ from tests.models import Test, Question, AnswerOption, TestResult
 from .serializers import (
     TestSerializer, TestListSerializer, QuestionSerializer,
     UserSerializer, UserCreateSerializer, CVSerializer,
-    TestResultSerializer, TestResultCreateSerializer, PositionSerializer
+    TestResultSerializer, TestResultCreateSerializer, PositionSerializer,
+    NotificationSerializer, NotificationErrorSerializer
 )
 
 User = get_user_model()
@@ -1663,6 +1664,18 @@ class StatisticsView(APIView):
             'best_results': best_results_data,
             'recent_results': recent_results_data,
         })
+
+
+class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    """Notification ViewSet - list, retrieve, filter, search"""
+    queryset = Notification.objects.all().prefetch_related('recipients', 'errors', 'created_by').order_by('-created_at')
+    serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['send_to_all', 'created_by']
+    search_fields = ['title', 'message']
+    ordering_fields = ['created_at', 'sent_at', 'title']
+    ordering = ['-created_at']
 
 
 class NotificationView(APIView):
