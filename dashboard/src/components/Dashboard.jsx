@@ -2,12 +2,15 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import Statistics from './Statistics'
 import ResultsTable from './ResultsTable'
+import UsersList from './UsersList'
+import TestsList from './TestsList'
 import './Dashboard.css'
 
 function Dashboard({ onLogout, apiBaseUrl }) {
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [activeTab, setActiveTab] = useState('statistics')
 
   useEffect(() => {
     loadStatistics()
@@ -30,11 +33,11 @@ function Dashboard({ onLogout, apiBaseUrl }) {
     }
   }
 
-  if (loading) {
+  if (loading && !stats) {
     return <div className="loading">Yuklanmoqda...</div>
   }
 
-  if (error) {
+  if (error && !stats) {
     return <div className="error">{error}</div>
   }
 
@@ -47,11 +50,87 @@ function Dashboard({ onLogout, apiBaseUrl }) {
         </div>
       </div>
 
-      {stats && (
-        <>
-          <Statistics stats={stats} />
-          <ResultsTable apiBaseUrl={apiBaseUrl} />
-        </>
+      {/* Tab Navigation */}
+      <div style={{ 
+        display: 'flex', 
+        gap: '10px', 
+        marginBottom: '24px',
+        borderBottom: '2px solid #dee2e6'
+      }}>
+        <button
+          className="btn"
+          onClick={() => setActiveTab('statistics')}
+          style={{
+            background: activeTab === 'statistics' ? '#229ED9' : '#f8f9fa',
+            color: activeTab === 'statistics' ? 'white' : '#333',
+            border: 'none',
+            borderRadius: '8px 8px 0 0',
+            padding: '12px 24px',
+            cursor: 'pointer',
+            fontWeight: activeTab === 'statistics' ? '600' : '400'
+          }}
+        >
+          📊 Statistika
+        </button>
+        <button
+          className="btn"
+          onClick={() => setActiveTab('results')}
+          style={{
+            background: activeTab === 'results' ? '#229ED9' : '#f8f9fa',
+            color: activeTab === 'results' ? 'white' : '#333',
+            border: 'none',
+            borderRadius: '8px 8px 0 0',
+            padding: '12px 24px',
+            cursor: 'pointer',
+            fontWeight: activeTab === 'results' ? '600' : '400'
+          }}
+        >
+          📋 Natijalar
+        </button>
+        <button
+          className="btn"
+          onClick={() => setActiveTab('users')}
+          style={{
+            background: activeTab === 'users' ? '#229ED9' : '#f8f9fa',
+            color: activeTab === 'users' ? 'white' : '#333',
+            border: 'none',
+            borderRadius: '8px 8px 0 0',
+            padding: '12px 24px',
+            cursor: 'pointer',
+            fontWeight: activeTab === 'users' ? '600' : '400'
+          }}
+        >
+          👥 Foydalanuvchilar
+        </button>
+        <button
+          className="btn"
+          onClick={() => setActiveTab('tests')}
+          style={{
+            background: activeTab === 'tests' ? '#229ED9' : '#f8f9fa',
+            color: activeTab === 'tests' ? 'white' : '#333',
+            border: 'none',
+            borderRadius: '8px 8px 0 0',
+            padding: '12px 24px',
+            cursor: 'pointer',
+            fontWeight: activeTab === 'tests' ? '600' : '400'
+          }}
+        >
+          📝 Testlar
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'statistics' && stats && (
+        <Statistics stats={stats} />
+      )}
+      {activeTab === 'results' && (
+        <ResultsTable apiBaseUrl={apiBaseUrl} />
+      )}
+      {activeTab === 'users' && (
+        <UsersList apiBaseUrl={apiBaseUrl} />
+      )}
+      {activeTab === 'tests' && (
+        <TestsList apiBaseUrl={apiBaseUrl} />
       )}
     </div>
   )
