@@ -25,6 +25,7 @@ function TestsList({ apiBaseUrl }) {
   const [importingTest, setImportingTest] = useState(false)
   const [showColumnSettings, setShowColumnSettings] = useState(false)
   const [showFilters, setShowFilters] = useState(true)
+  const [fullView, setFullView] = useState(false)
   
   // Column visibility state
   const [visibleColumns, setVisibleColumns] = useState({
@@ -356,11 +357,52 @@ function TestsList({ apiBaseUrl }) {
     return <div className="error">{error}</div>
   }
 
+  // Handle keyboard events for full-view toggle
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (fullView && (e.key === 'Escape' || (e.key === 'Enter' && e.target === document.activeElement))) {
+        setFullView(false)
+      }
+    }
+    if (fullView) {
+      document.addEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = ''
+    }
+  }, [fullView])
+
   return (
-    <div className="table-card" style={{ position: 'relative' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-        <h3 style={{ margin: 0 }}>Testlar</h3>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+    <>
+      {fullView && (
+        <div 
+          className={`table-full-view-overlay ${fullView ? 'active' : ''}`}
+          onClick={() => setFullView(false)}
+        />
+      )}
+      <div className={`table-card ${fullView ? 'full-view' : ''}`} style={{ position: 'relative' }}>
+        <div className="table-header-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            className="btn-icon"
+            onClick={() => setFullView(!fullView)}
+            title={fullView ? "Oddiy ko'rinish" : "To'liq ko'rinish"}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                setFullView(!fullView)
+              }
+            }}
+          >
+            <Icon name={fullView ? "minimize" : "maximize"} size={18} color="currentColor" />
+          </button>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+          <h3 style={{ margin: 0 }}>Testlar</h3>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             className="btn-icon"
             onClick={() => setShowFilters(!showFilters)}
@@ -424,7 +466,7 @@ function TestsList({ apiBaseUrl }) {
 
       {/* Filters Section - Toggleable */}
       {showFilters && (
-        <div style={{ 
+        <div className="table-filters" style={{ 
           marginBottom: '20px', 
           padding: '16px', 
           background: 'var(--bg-tertiary)', 
@@ -552,13 +594,14 @@ function TestsList({ apiBaseUrl }) {
             onPageSizeChange={setPageSize}
             position="top"
           />
-          <div style={{ 
+          <div className="table-wrapper" style={{ 
             overflowX: 'auto', 
             overflowY: 'auto',
-            maxHeight: pageSize === 10 ? '400px' : pageSize === 25 ? '600px' : pageSize === 50 ? '800px' : 'calc(100vh - 400px)',
+            maxHeight: fullView ? 'none' : (pageSize === 10 ? '400px' : pageSize === 25 ? '600px' : pageSize === 50 ? '800px' : 'calc(100vh - 400px)'),
             position: 'relative',
             border: '1px solid var(--border)',
-            borderRadius: '12px'
+            borderRadius: '12px',
+            flex: fullView ? 1 : 'none'
           }}>
             <table style={{ width: '100%', minWidth: '100%' }}>
               <thead>
@@ -677,7 +720,8 @@ function TestsList({ apiBaseUrl }) {
           }}
         />
       )}
-    </div>
+      </div>
+    </>
   )
 }
 
