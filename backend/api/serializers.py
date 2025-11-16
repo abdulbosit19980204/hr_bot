@@ -98,6 +98,9 @@ class TelegramProfileSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     position = PositionSerializer(read_only=True)
     position_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    tests_passed_count = serializers.SerializerMethodField()
+    tests_total_count = serializers.SerializerMethodField()
+    best_score = serializers.SerializerMethodField()
     telegram_profile = TelegramProfileSerializer(read_only=True)
 
     class Meta:
@@ -105,8 +108,35 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'first_name', 'last_name', 'email', 'phone', 
                   'position', 'position_id', 'telegram_id', 'telegram_profile',
                   'notification_enabled', 'is_blocked', 'blocked_reason', 
-                  'trial_tests_taken', 'created_at']
+                  'trial_tests_taken', 'tests_passed_count', 'tests_total_count', 
+                  'best_score', 'created_at']
         read_only_fields = ['created_at', 'is_blocked', 'blocked_reason', 'blocked_at']
+    
+    def get_tests_passed_count(self, obj):
+        """Jami o'tgan testlar soni"""
+        from tests.models import TestResult
+        return TestResult.objects.filter(
+            user=obj,
+            is_completed=True,
+            is_passed=True
+        ).count()
+    
+    def get_tests_total_count(self, obj):
+        """Jami ishlangan testlar soni"""
+        from tests.models import TestResult
+        return TestResult.objects.filter(
+            user=obj,
+            is_completed=True
+        ).count()
+    
+    def get_best_score(self, obj):
+        """Eng yaxshi ball"""
+        from tests.models import TestResult
+        best_result = TestResult.objects.filter(
+            user=obj,
+            is_completed=True
+        ).order_by('-score').first()
+        return best_result.score if best_result else None
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
