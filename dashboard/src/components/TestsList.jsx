@@ -36,15 +36,41 @@ function TestsList({ apiBaseUrl }) {
         'Authorization': `Bearer ${token}`
       }
       
-      // Try to access questions_list endpoint (superuser only)
-      // This is a lightweight check
-      await axios.get(`${apiBaseUrl}/tests/1/questions_list/`, {
+      // First, get a list of tests to find a valid test ID
+      const testsResponse = await axios.get(`${apiBaseUrl}/tests/`, {
+        headers,
+        params: { page_size: 1 }
+      })
+      
+      const tests = testsResponse.data.results || testsResponse.data
+      if (tests.length === 0) {
+        // No tests available, try to create one to check permission
+        try {
+          await axios.post(
+            `${apiBaseUrl}/tests/`,
+            {
+              title: '__permission_check__',
+              time_limit: 60,
+              passing_score: 60
+            },
+            { headers }
+          )
+          setIsSuperuser(true)
+        } catch (err) {
+          setIsSuperuser(err.response?.status !== 403)
+        }
+        return
+      }
+      
+      // Try to access questions_list endpoint (superuser only) with first test
+      const testId = tests[0].id
+      await axios.get(`${apiBaseUrl}/tests/${testId}/questions_list/`, {
         headers,
         params: { page: 1, page_size: 1 }
       })
       setIsSuperuser(true)
     } catch (err) {
-      if (err.response?.status === 403 || err.response?.status === 404) {
+      if (err.response?.status === 403) {
         setIsSuperuser(false)
       } else {
         // Other error - assume not superuser
