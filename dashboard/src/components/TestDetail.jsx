@@ -9,6 +9,7 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
   const [showQuestions, setShowQuestions] = useState(false)
   const [questions, setQuestions] = useState([])
   const [questionsPage, setQuestionsPage] = useState(1)
+  const [questionsPageSize, setQuestionsPageSize] = useState(20)
   const [questionsTotalPages, setQuestionsTotalPages] = useState(1)
   const [questionsCount, setQuestionsCount] = useState(0)
   const [isSuperuser, setIsSuperuser] = useState(false)
@@ -24,7 +25,7 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
     if (showQuestions && isSuperuser) {
       loadQuestions()
     }
-  }, [showQuestions, questionsPage, isSuperuser])
+  }, [showQuestions, questionsPage, questionsPageSize, isSuperuser])
 
   const checkSuperuser = async () => {
     try {
@@ -38,7 +39,7 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
       // We'll check by trying to access a superuser-only endpoint
       const response = await axios.get(`${apiBaseUrl}/tests/${test.id}/questions_list/`, { 
         headers,
-        params: { page: 1 }
+        params: { page: 1, page_size: 1 }
       })
       setIsSuperuser(true)
     } catch (err) {
@@ -60,14 +61,17 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
       }
 
       const response = await axios.get(`${apiBaseUrl}/tests/${test.id}/questions_list/`, {
-        params: { page: questionsPage },
+        params: { 
+          page: questionsPage,
+          page_size: questionsPageSize
+        },
         headers
       })
       
       setQuestions(response.data.results || [])
       setQuestionsCount(response.data.count || 0)
       if (response.data.count) {
-        setQuestionsTotalPages(Math.ceil(response.data.count / 20))
+        setQuestionsTotalPages(Math.ceil(response.data.count / questionsPageSize))
       }
     } catch (err) {
       console.error('Error loading questions:', err)
@@ -246,15 +250,36 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
       {/* Test Questions */}
       {isSuperuser && (
         <div className="table-card" style={{ marginBottom: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
             <h3 style={{ margin: 0 }}>Test savollari ({questionsCount || testDetails?.questions_count || 0})</h3>
-            <button 
-              className="btn" 
-              onClick={() => setShowQuestions(!showQuestions)}
-              style={{ background: showQuestions ? '#6c757d' : '#229ED9' }}
-            >
-              {showQuestions ? 'Yashirish' : 'Ko\'rsatish'}
-            </button>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              {showQuestions && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ fontSize: '14px', color: '#666' }}>Har sahifada:</label>
+                  <select
+                    className="input"
+                    value={questionsPageSize}
+                    onChange={(e) => {
+                      setQuestionsPageSize(Number(e.target.value))
+                      setQuestionsPage(1) // Reset to first page when changing page size
+                    }}
+                    style={{ width: '80px', margin: 0, padding: '6px' }}
+                  >
+                    <option value="10">10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
+                </div>
+              )}
+              <button 
+                className="btn" 
+                onClick={() => setShowQuestions(!showQuestions)}
+                style={{ background: showQuestions ? '#6c757d' : '#229ED9' }}
+              >
+                {showQuestions ? 'Yashirish' : 'Ko\'rsatish'}
+              </button>
+            </div>
           </div>
           
           {showQuestions && (
@@ -267,7 +292,7 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
                 <>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginBottom: '20px' }}>
                     {questions.map((question, index) => {
-                      const globalIndex = (questionsPage - 1) * 20 + index
+                      const globalIndex = (questionsPage - 1) * questionsPageSize + index
                       return (
                         <div 
                           key={question.id} 

@@ -118,9 +118,18 @@ class TestViewSet(viewsets.ModelViewSet):
         test = self.get_object()
         questions = test.questions.all().prefetch_related('options').order_by('order', 'id')
         
-        # Pagination
+        # Pagination with custom page size
         paginator = PageNumberPagination()
-        paginator.page_size = 20
+        page_size = request.query_params.get('page_size', '20')
+        try:
+            page_size = int(page_size)
+            if page_size < 1:
+                page_size = 20
+            if page_size > 100:  # Max limit
+                page_size = 100
+        except (ValueError, TypeError):
+            page_size = 20
+        paginator.page_size = page_size
         paginated_questions = paginator.paginate_queryset(questions, request)
         
         serializer = QuestionSerializer(paginated_questions, many=True, context={'admin_view': True, 'request': request})
