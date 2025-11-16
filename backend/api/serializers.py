@@ -31,13 +31,18 @@ class QuestionSerializer(serializers.ModelSerializer):
         fields = ['id', 'text', 'order', 'options']
     
     def to_representation(self, instance):
-        """Randomize options order"""
+        """Randomize options order (only if not admin view)"""
         import random
         data = super().to_representation(instance)
         options = data.get('options', [])
         if options:
-            # Shuffle options randomly
-            random.shuffle(options)
+            # Don't shuffle if this is an admin view (check context)
+            if not self.context.get('admin_view', False):
+                # Shuffle options randomly
+                random.shuffle(options)
+            else:
+                # Sort by order for admin view
+                options.sort(key=lambda x: x.get('order', 0))
             data['options'] = options
         return data
 

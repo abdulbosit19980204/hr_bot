@@ -103,6 +103,30 @@ class TestViewSet(viewsets.ModelViewSet):
         return queryset.prefetch_related('positions')
     
     @action(detail=True, methods=['get'])
+    def questions_list(self, request, pk=None):
+        """Get all test questions with pagination (for superusers only)"""
+        from rest_framework.pagination import PageNumberPagination
+        from rest_framework.permissions import IsAdminUser
+        
+        # Check if user is superuser
+        if not request.user.is_authenticated or not request.user.is_superuser:
+            return Response(
+                {'error': 'Permission denied. Superuser access required.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        test = self.get_object()
+        questions = test.questions.all().prefetch_related('options').order_by('order', 'id')
+        
+        # Pagination
+        paginator = PageNumberPagination()
+        paginator.page_size = 20
+        paginated_questions = paginator.paginate_queryset(questions, request)
+        
+        serializer = QuestionSerializer(paginated_questions, many=True, context={'admin_view': True, 'request': request})
+        return paginator.get_paginated_response(serializer.data)
+    
+    @action(detail=True, methods=['get'])
     def questions(self, request, pk=None):
         """Get test questions (random if configured)"""
         test = self.get_object()

@@ -7,12 +7,77 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
   const [statistics, setStatistics] = useState(null)
   const [testDetails, setTestDetails] = useState(null)
   const [showQuestions, setShowQuestions] = useState(false)
+  const [questions, setQuestions] = useState([])
+  const [questionsPage, setQuestionsPage] = useState(1)
+  const [questionsTotalPages, setQuestionsTotalPages] = useState(1)
+  const [questionsCount, setQuestionsCount] = useState(0)
+  const [isSuperuser, setIsSuperuser] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     loadTestData()
+    checkSuperuser()
   }, [test.id])
+
+  useEffect(() => {
+    if (showQuestions && isSuperuser) {
+      loadQuestions()
+    }
+  }, [showQuestions, questionsPage, isSuperuser])
+
+  const checkSuperuser = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      const headers = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      // Try to get user info from token or check permissions
+      // We'll check by trying to access a superuser-only endpoint
+      const response = await axios.get(`${apiBaseUrl}/tests/${test.id}/questions_list/`, { 
+        headers,
+        params: { page: 1 }
+      })
+      setIsSuperuser(true)
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setIsSuperuser(false)
+      } else {
+        // If endpoint doesn't exist or other error, assume not superuser
+        setIsSuperuser(false)
+      }
+    }
+  }
+
+  const loadQuestions = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      const headers = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await axios.get(`${apiBaseUrl}/tests/${test.id}/questions_list/`, {
+        params: { page: questionsPage },
+        headers
+      })
+      
+      setQuestions(response.data.results || [])
+      setQuestionsCount(response.data.count || 0)
+      if (response.data.count) {
+        setQuestionsTotalPages(Math.ceil(response.data.count / 20))
+      }
+    } catch (err) {
+      console.error('Error loading questions:', err)
+      if (err.response?.status === 403) {
+        setIsSuperuser(false)
+        setShowQuestions(false)
+        alert('Bu funksiya faqat super userlar uchun')
+      }
+    }
+  }
 
   const loadTestData = async () => {
     try {
@@ -23,7 +88,7 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
         headers['Authorization'] = `Bearer ${token}`
       }
 
-      // Load full test details with questions
+      // Load full test details (without questions for superuser view)
       const testResponse = await axios.get(`${apiBaseUrl}/tests/${test.id}/`, { headers })
       setTestDetails(testResponse.data)
       
@@ -179,43 +244,45 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
       )}
 
       {/* Test Questions */}
-      <div className="table-card" style={{ marginBottom: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h3 style={{ margin: 0 }}>Test savollari ({testDetails?.questions?.length || 0})</h3>
-          <button 
-            className="btn" 
-            onClick={() => setShowQuestions(!showQuestions)}
-            style={{ background: showQuestions ? '#6c757d' : '#229ED9' }}
-          >
-            {showQuestions ? 'Yashirish' : 'Ko\'rsatish'}
-          </button>
-        </div>
-        
-        {showQuestions && testDetails?.questions && (
-          <div>
-            {testDetails.questions.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
-                Bu testda savollar topilmadi
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                {testDetails.questions
-                  .sort((a, b) => (a.order || 0) - (b.order || 0))
-                  .map((question, index) => (
-                  <div 
-                    key={question.id} 
-                    style={{ 
-                      border: '1px solid #e0e0e0', 
-                      borderRadius: '8px', 
-                      padding: '20px',
-                      background: '#fafafa'
-                    }}
-                  >
-                    <div style={{ marginBottom: '16px' }}>
-                      <strong style={{ fontSize: '16px', color: '#333' }}>
-                        {index + 1}. {question.text}
-                      </strong>
-                    </div>
+      {isSuperuser && (
+        <div className="table-card" style={{ marginBottom: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3 style={{ margin: 0 }}>Test savollari ({questionsCount || testDetails?.questions_count || 0})</h3>
+            <button 
+              className="btn" 
+              onClick={() => setShowQuestions(!showQuestions)}
+              style={{ background: showQuestions ? '#6c757d' : '#229ED9' }}
+            >
+              {showQuestions ? 'Yashirish' : 'Ko\'rsatish'}
+            </button>
+          </div>
+          
+          {showQuestions && (
+            <div>
+              {questions.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                  Bu testda savollar topilmadi
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginBottom: '20px' }}>
+                    {questions.map((question, index) => {
+                      const globalIndex = (questionsPage - 1) * 20 + index
+                      return (
+                        <div 
+                          key={question.id} 
+                          style={{ 
+                            border: '1px solid #e0e0e0', 
+                            borderRadius: '8px', 
+                            padding: '20px',
+                            background: '#fafafa'
+                          }}
+                        >
+                          <div style={{ marginBottom: '16px' }}>
+                            <strong style={{ fontSize: '16px', color: '#333' }}>
+                              {globalIndex + 1}. {question.text}
+                            </strong>
+                          </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       {question.options && question.options.length > 0 ? (
                         question.options
@@ -256,15 +323,40 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
                         <div style={{ color: '#999', fontStyle: 'italic' }}>
                           Javob variantlari topilmadi
                         </div>
-                      )}
-                    </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                    })}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+                  
+                  {questionsTotalPages > 1 && (
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px' }}>
+                      <button
+                        className="btn"
+                        onClick={() => setQuestionsPage(questionsPage - 1)}
+                        disabled={questionsPage === 1}
+                      >
+                        Oldingi
+                      </button>
+                      <span style={{ padding: '8px 16px', display: 'flex', alignItems: 'center' }}>
+                        {questionsPage} / {questionsTotalPages}
+                      </span>
+                      <button
+                        className="btn"
+                        onClick={() => setQuestionsPage(questionsPage + 1)}
+                        disabled={questionsPage === questionsTotalPages}
+                      >
+                        Keyingi
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Test Results */}
       <div className="table-card">
