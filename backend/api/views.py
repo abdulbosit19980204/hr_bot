@@ -941,6 +941,9 @@ class NotificationView(APIView):
             elif notification_type == 'job_offer':
                 # Ishga taklif uchun format
                 formatted_message = f"💼 <b>Ishga taklif</b>\n\n{message}"
+            elif notification_type == 'encouragement':
+                # Tashakkur va rag'batlantirish uchun format
+                formatted_message = f"🙏 <b>Tashakkur</b>\n\n{message}"
             
             # Create notification
             notification = Notification.objects.create(

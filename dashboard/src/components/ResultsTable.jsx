@@ -151,6 +151,35 @@ function ResultsTable({ apiBaseUrl }) {
     }
   }
 
+  const handleNotificationTypeChange = (newType) => {
+    setNotificationType(newType)
+    
+    // Auto-fill default templates based on notification type
+    if (newType === 'encouragement') {
+      if (!notificationTitle) {
+        setNotificationTitle('Tashakkur va rag\'batlantirish')
+      }
+      if (!notificationMessage) {
+        setNotificationMessage(
+          'Hurmatli nomzod!\n\n' +
+          'Sizning test natijangizni ko\'rib chiqdik. Bu safar natija bizning talablarimizga to\'liq javob bermadi, lekin sizning qiziqishingiz va harakatlaringizni qadrlaymiz.\n\n' +
+          'Biz sizni keyingi vakansiyalarda ham ko\'rishdan xursand bo\'lamiz. Yangi imkoniyatlar paydo bo\'lganda sizga xabar beramiz.\n\n' +
+          'Yana bir bor tashakkur!\n\n' +
+          'Hurmat bilan,\n' +
+          'HR jamoasi'
+        )
+      }
+    } else if (newType === 'interview') {
+      if (!notificationTitle) {
+        setNotificationTitle('Suxbat taklifi')
+      }
+    } else if (newType === 'job_offer') {
+      if (!notificationTitle) {
+        setNotificationTitle('Ishga taklif')
+      }
+    }
+  }
+
   const handleSendNotification = async () => {
     if (selectedCandidates.size === 0) {
       alert('Iltimos, kamida bitta nomzodni tanlang')
@@ -451,11 +480,12 @@ function ResultsTable({ apiBaseUrl }) {
               <select
                 className="input"
                 value={notificationType}
-                onChange={(e) => setNotificationType(e.target.value)}
+                onChange={(e) => handleNotificationTypeChange(e.target.value)}
                 style={{ width: '100%', margin: 0 }}
               >
                 <option value="interview">Suxbat taklifi</option>
                 <option value="job_offer">Ishga taklif</option>
+                <option value="encouragement">Tashakkur va rag'batlantirish</option>
               </select>
             </div>
 
@@ -468,7 +498,11 @@ function ResultsTable({ apiBaseUrl }) {
                 className="input"
                 value={notificationTitle}
                 onChange={(e) => setNotificationTitle(e.target.value)}
-                placeholder={notificationType === 'interview' ? 'Suxbat taklifi' : 'Ishga taklif'}
+                placeholder={
+                  notificationType === 'interview' ? 'Suxbat taklifi' : 
+                  notificationType === 'job_offer' ? 'Ishga taklif' : 
+                  'Tashakkur va rag\'batlantirish'
+                }
                 style={{ width: '100%', margin: 0 }}
               />
             </div>
