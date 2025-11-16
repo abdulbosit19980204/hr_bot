@@ -378,7 +378,7 @@ function TestsList({ apiBaseUrl }) {
 
   return (
     <>
-      <div className={`table-card ${full-view ? 'full-view' : ''}`} style={{ position: 'relative' }}>
+      <div className={`table-card ${fullView ? 'full-view' : ''}`} style={{ position: 'relative' }}>
         <div className="table-header-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <button
             className="btn-icon"
