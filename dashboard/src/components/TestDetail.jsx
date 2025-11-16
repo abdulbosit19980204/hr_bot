@@ -13,13 +13,30 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
   const [questionsTotalPages, setQuestionsTotalPages] = useState(1)
   const [questionsCount, setQuestionsCount] = useState(0)
   const [isSuperuser, setIsSuperuser] = useState(false)
+  const [showScrollTop, setShowScrollTop] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     loadTestData()
     checkSuperuser()
+    
+    // Scroll event listener for "Top" button
+    const handleScroll = () => {
+      if (window.scrollY > 300) {
+        setShowScrollTop(true)
+      } else {
+        setShowScrollTop(false)
+      }
+    }
+    
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
   }, [test.id])
+  
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   useEffect(() => {
     if (showQuestions && isSuperuser) {
@@ -290,6 +307,35 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
                 </div>
               ) : (
                 <>
+                  {/* Pagination at top */}
+                  {questionsTotalPages > 1 && (
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '20px' }}>
+                      <button
+                        className="btn"
+                        onClick={() => {
+                          setQuestionsPage(questionsPage - 1)
+                          scrollToTop()
+                        }}
+                        disabled={questionsPage === 1}
+                      >
+                        Oldingi
+                      </button>
+                      <span style={{ padding: '8px 16px', display: 'flex', alignItems: 'center' }}>
+                        {questionsPage} / {questionsTotalPages}
+                      </span>
+                      <button
+                        className="btn"
+                        onClick={() => {
+                          setQuestionsPage(questionsPage + 1)
+                          scrollToTop()
+                        }}
+                        disabled={questionsPage === questionsTotalPages}
+                      >
+                        Keyingi
+                      </button>
+                    </div>
+                  )}
+                  
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginBottom: '20px' }}>
                     {questions.map((question, index) => {
                       const globalIndex = (questionsPage - 1) * questionsPageSize + index
@@ -354,33 +400,48 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
                     )
                     })}
                   </div>
-                  
-                  {questionsTotalPages > 1 && (
-                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px' }}>
-                      <button
-                        className="btn"
-                        onClick={() => setQuestionsPage(questionsPage - 1)}
-                        disabled={questionsPage === 1}
-                      >
-                        Oldingi
-                      </button>
-                      <span style={{ padding: '8px 16px', display: 'flex', alignItems: 'center' }}>
-                        {questionsPage} / {questionsTotalPages}
-                      </span>
-                      <button
-                        className="btn"
-                        onClick={() => setQuestionsPage(questionsPage + 1)}
-                        disabled={questionsPage === questionsTotalPages}
-                      >
-                        Keyingi
-                      </button>
-                    </div>
-                  )}
                 </>
               )}
             </div>
           )}
         </div>
+      )}
+
+      {/* Scroll to Top Button */}
+      {showScrollTop && (
+        <button
+          onClick={scrollToTop}
+          style={{
+            position: 'fixed',
+            bottom: '30px',
+            right: '30px',
+            width: '50px',
+            height: '50px',
+            borderRadius: '50%',
+            background: '#229ED9',
+            color: 'white',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+            zIndex: 1000,
+            transition: 'all 0.3s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = '#1a7ba8'
+            e.target.style.transform = 'scale(1.1)'
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = '#229ED9'
+            e.target.style.transform = 'scale(1)'
+          }}
+          title="Yuqoriga chiqish"
+        >
+          ↑
+        </button>
       )}
 
       {/* Test Results */}
