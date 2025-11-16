@@ -60,13 +60,21 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Check if Nginx is available
-nginx -v >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] Nginx not found! Please install Nginx
-    echo Download from: https://nginx.org/en/download.html
-    pause
-    exit /b 1
+REM Check if Nginx is available (prefer local nginx folder)
+set NGINX_EXE=%SCRIPT_DIR%nginx\nginx-1.28.0\nginx.exe
+if exist "%NGINX_EXE%" (
+    echo [INFO] Using local Nginx at: %NGINX_EXE%
+) else (
+    nginx -v >nul 2>&1
+    if errorlevel 1 (
+        echo [ERROR] Nginx not found! Please install Nginx
+        echo Download from: https://nginx.org/en/download.html
+        pause
+        exit /b 1
+    ) else (
+        echo [INFO] Using system Nginx from PATH
+        set NGINX_EXE=nginx
+    )
 )
 
 REM Check if Ngrok is available
@@ -87,26 +95,31 @@ if errorlevel 1 (
 )
 cd ..
 
-echo [2/6] Starting Backend (port 8000)...
-start "HR Bot - Backend" /MIN cmd /k "cd /d %SCRIPT_DIR%backend && %PYTHON_CMD% manage.py runserver 0.0.0.0:8000"
+echo [2/7] Starting Backend (port 8000)...
+REM Prefer backend virtual environment if exists
+if exist "%SCRIPT_DIR%backend\venv\Scripts\activate.bat" (
+    start "HR Bot - Backend" /MIN cmd /k "cd /d %SCRIPT_DIR%backend && call venv\Scripts\activate.bat && python manage.py runserver 0.0.0.0:8000"
+) else (
+    start "HR Bot - Backend" /MIN cmd /k "cd /d %SCRIPT_DIR%backend && %PYTHON_CMD% manage.py runserver 0.0.0.0:8000"
+)
 timeout /t 3 /nobreak >nul
 
-echo [3/6] Starting WebApp (port 5173)...
+echo [3/7] Starting WebApp (port 5173)...
 start "HR Bot - WebApp" /MIN cmd /k "cd /d %SCRIPT_DIR%webapp && npm run dev"
 timeout /t 5 /nobreak >nul
 
-echo [4/6] Starting Nginx (port 8080)...
+echo [4/7] Starting Telegram Bot...
+if exist "%SCRIPT_DIR%telegram_bot\venv\Scripts\activate.bat" (
+    start "HR Bot - Telegram Bot" /MIN cmd /k "cd /d %SCRIPT_DIR%telegram_bot && call venv\Scripts\activate.bat && python bot.py"
+) else (
+    start "HR Bot - Telegram Bot" /MIN cmd /k "cd /d %SCRIPT_DIR%telegram_bot && %PYTHON_CMD% bot.py"
+)
+timeout /t 3 /nobreak >nul
+
+echo [5/7] Starting Nginx (port 8080)...
 REM Stop existing Nginx if running
 taskkill /F /IM nginx.exe >nul 2>&1
 timeout /t 1 /nobreak >nul
-REM Use full path to nginx.exe
-set NGINX_EXE=%SCRIPT_DIR%nginx\nginx-1.28.0\nginx.exe
-if not exist "%NGINX_EXE%" (
-    echo [ERROR] Nginx not found at: %NGINX_EXE%
-    echo Please install Nginx or update the path in start_all.bat
-    pause
-    exit /b 1
-)
 REM Create logs and temp directories if they don't exist
 if not exist "%SCRIPT_DIR%nginx\logs" mkdir "%SCRIPT_DIR%nginx\logs"
 if not exist "%SCRIPT_DIR%nginx\temp" mkdir "%SCRIPT_DIR%nginx\temp"
@@ -126,10 +139,10 @@ start "HR Bot - Nginx" /MIN cmd /k "cd /d %SCRIPT_DIR%nginx && %NGINX_EXE% -p %S
 cd /d "%SCRIPT_DIR%"
 timeout /t 2 /nobreak >nul
 
-echo [5/6] Starting Ngrok...
+echo [6/7] Starting Ngrok...
 start "HR Bot - Ngrok" cmd /k "ngrok http 8080"
 
-echo [6/6] Waiting for services to start...
+echo [7/7] Waiting for services to start...
 timeout /t 3 /nobreak >nul
 
 echo.
