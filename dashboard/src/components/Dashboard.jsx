@@ -4,6 +4,7 @@ import Statistics from './Statistics'
 import ResultsTable from './ResultsTable'
 import UsersList from './UsersList'
 import TestsList from './TestsList'
+import CVsList from './CVsList'
 import './Dashboard.css'
 
 function Dashboard({ onLogout, apiBaseUrl }) {
@@ -117,6 +118,21 @@ function Dashboard({ onLogout, apiBaseUrl }) {
         >
           📝 Testlar
         </button>
+        <button
+          className="btn"
+          onClick={() => setActiveTab('cvs')}
+          style={{
+            background: activeTab === 'cvs' ? '#229ED9' : '#f8f9fa',
+            color: activeTab === 'cvs' ? 'white' : '#333',
+            border: 'none',
+            borderRadius: '8px 8px 0 0',
+            padding: '12px 24px',
+            cursor: 'pointer',
+            fontWeight: activeTab === 'cvs' ? '600' : '400'
+          }}
+        >
+          📄 CV'lar
+        </button>
       </div>
 
       {/* Tab Content */}
@@ -131,6 +147,9 @@ function Dashboard({ onLogout, apiBaseUrl }) {
       )}
       {activeTab === 'tests' && (
         <TestsList apiBaseUrl={apiBaseUrl} />
+      )}
+      {activeTab === 'cvs' && (
+        <CVsList apiBaseUrl={apiBaseUrl} />
       )}
     </div>
   )
