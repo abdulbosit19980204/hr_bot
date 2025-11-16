@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import UserDetail from './UserDetail'
+import { Icon } from './Icons'
 import './Dashboard.css'
 
 function UsersList({ apiBaseUrl }) {
@@ -19,6 +20,21 @@ function UsersList({ apiBaseUrl }) {
   const [notificationMessage, setNotificationMessage] = useState('')
   const [notificationType, setNotificationType] = useState('interview')
   const [sendingNotification, setSendingNotification] = useState(false)
+  const [showColumnSettings, setShowColumnSettings] = useState(false)
+  
+  // Column visibility state
+  const [visibleColumns, setVisibleColumns] = useState({
+    id: true,
+    firstName: true,
+    lastName: true,
+    phone: true,
+    email: true,
+    position: true,
+    telegramId: true,
+    status: true,
+    testsPassed: true,
+    bestScore: true
+  })
 
   useEffect(() => {
     loadPositions()
@@ -296,7 +312,7 @@ function UsersList({ apiBaseUrl }) {
   }
 
   return (
-    <div className="table-card">
+    <div className="table-card" style={{ position: 'relative' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>Foydalanuvchilar</h3>
@@ -313,13 +329,21 @@ function UsersList({ apiBaseUrl }) {
           )}
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn"
+            onClick={() => setShowColumnSettings(!showColumnSettings)}
+            style={{ margin: 0, background: '#6c757d', position: 'relative' }}
+            title="Ustunlarni boshqarish"
+          >
+            <Icon name="settings" size={16} color="white" /> Ustunlar
+          </button>
           {selectedUsers.size > 0 && (
             <button
               className="btn"
               onClick={() => setShowNotificationModal(true)}
               style={{ margin: 0, background: '#28a745' }}
             >
-              📨 Notification yuborish ({selectedUsers.size})
+              <Icon name="bell" size={16} color="white" /> Notification ({selectedUsers.size})
             </button>
           )}
           <button
@@ -328,7 +352,7 @@ function UsersList({ apiBaseUrl }) {
             style={{ margin: 0, background: '#229ED9' }}
             title="Excel formatida export qilish"
           >
-            ⬇ Excel
+            <Icon name="download" size={16} color="white" /> Excel
           </button>
           <button
             className="btn"
@@ -336,7 +360,7 @@ function UsersList({ apiBaseUrl }) {
             style={{ margin: 0, background: '#6c757d' }}
             title="CSV formatida export qilish"
           >
-            ⬇ CSV
+            <Icon name="download" size={16} color="white" /> CSV
           </button>
           <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px' }}>
             <input
@@ -366,95 +390,157 @@ function UsersList({ apiBaseUrl }) {
         </div>
       </div>
 
+      {/* Column Settings Dropdown */}
+      {showColumnSettings && (
+        <div style={{
+          position: 'absolute',
+          top: '60px',
+          right: '10px',
+          background: 'white',
+          border: '1px solid #E6E6E6',
+          borderRadius: '12px',
+          boxShadow: '0 8px 16px rgba(0, 0, 0, 0.10)',
+          padding: '16px',
+          zIndex: 100,
+          minWidth: '200px',
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div style={{ marginBottom: '12px', fontWeight: 600, fontSize: '14px', color: '#1A1A1A' }}>
+            Ustunlarni tanlash
+          </div>
+          {Object.entries({
+            id: 'ID',
+            firstName: 'Ism',
+            lastName: 'Familiya',
+            phone: 'Telefon',
+            email: 'Email',
+            position: 'Lavozim',
+            testsPassed: 'Test natijalari',
+            telegramId: 'Telegram ID',
+            status: 'Holat',
+            bestScore: 'Eng yaxshi ball'
+          }).map(([key, label]) => (
+            <label key={key} style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              padding: '8px 0',
+              cursor: 'pointer',
+              fontSize: '14px',
+              color: '#1A1A1A'
+            }}>
+              <input
+                type="checkbox"
+                checked={visibleColumns[key]}
+                onChange={(e) => setVisibleColumns({ ...visibleColumns, [key]: e.target.checked })}
+                style={{ cursor: 'pointer' }}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      )}
+
       {users.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
           Foydalanuvchilar topilmadi
         </div>
       ) : (
         <>
-          <table>
-            <thead>
-              <tr>
-                <th>
-                  <input
-                    type="checkbox"
-                    checked={selectedUsers.size === users.length && users.length > 0}
-                    onChange={handleSelectAll}
-                    style={{ cursor: 'pointer' }}
-                  />
-                </th>
-                <th>ID</th>
-                <th>Ism</th>
-                <th>Familiya</th>
-                <th>Telefon</th>
-                <th>Email</th>
-                <th>Lavozim</th>
-                <th>Test natijalari</th>
-                <th>Telegram ID</th>
-                <th>Holat</th>
-                <th>Ro'yxatdan o'tgan</th>
-                <th>Harakatlar</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => (
-                <tr key={user.id} style={{ background: selectedUsers.has(user.id) ? '#e7f3ff' : '' }}>
-                  <td>
+          <div style={{ overflowX: 'auto', position: 'relative' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>
                     <input
                       type="checkbox"
-                      checked={selectedUsers.has(user.id)}
-                      onChange={() => handleSelectUser(user.id)}
+                      checked={selectedUsers.size === users.length && users.length > 0}
+                      onChange={handleSelectAll}
                       style={{ cursor: 'pointer' }}
                     />
-                  </td>
-                  <td>{user.id}</td>
-                  <td>{user.first_name || '-'}</td>
-                  <td>{user.last_name || '-'}</td>
-                  <td>{user.phone || '-'}</td>
-                  <td>{user.email || '-'}</td>
-                  <td>{user.position?.name || '-'}</td>
-                  <td>
-                    {user.tests_total_count > 0 ? (
-                      <div style={{ fontSize: '13px' }}>
-                        <div>
-                          <strong style={{ color: '#28a745' }}>
-                            ✅ {user.tests_passed_count || 0}
-                          </strong>
-                          {' / '}
-                          <span>{user.tests_total_count || 0}</span>
-                        </div>
-                        {user.best_score !== null && (
-                          <div style={{ color: '#666', marginTop: '2px' }}>
-                            Eng yaxshi: <strong>{user.best_score}%</strong>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <span style={{ color: '#999' }}>-</span>
-                    )}
-                  </td>
-                  <td>{user.telegram_id || '-'}</td>
-                  <td>
-                    {user.is_blocked ? (
-                      <span style={{ color: '#dc3545' }}>🚫 Bloklangan</span>
-                    ) : (
-                      <span style={{ color: '#28a745' }}>✅ Faol</span>
-                    )}
-                  </td>
-                  <td>{user.created_at ? new Date(user.created_at).toLocaleDateString('uz-UZ') : '-'}</td>
-                  <td>
-                    <button 
-                      className="btn" 
-                      onClick={() => handleUserClick(user)}
-                      style={{ padding: '6px 12px', fontSize: '14px' }}
-                    >
-                      Ko'rish
-                    </button>
-                  </td>
+                  </th>
+                  {visibleColumns.id && <th>ID</th>}
+                  {visibleColumns.firstName && <th>Ism</th>}
+                  {visibleColumns.lastName && <th>Familiya</th>}
+                  {visibleColumns.phone && <th>Telefon</th>}
+                  {visibleColumns.email && <th>Email</th>}
+                  {visibleColumns.position && <th>Lavozim</th>}
+                  {visibleColumns.testsPassed && <th>Test natijalari</th>}
+                  {visibleColumns.telegramId && <th>Telegram ID</th>}
+                  {visibleColumns.status && <th>Holat</th>}
+                  {visibleColumns.bestScore && <th>Eng yaxshi ball</th>}
+                  <th>Ro'yxatdan o'tgan</th>
+                  <th>Harakatlar</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id} style={{ background: selectedUsers.has(user.id) ? 'rgba(34, 158, 217, 0.04)' : '' }}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedUsers.has(user.id)}
+                        onChange={() => handleSelectUser(user.id)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    </td>
+                    {visibleColumns.id && <td>{user.id}</td>}
+                    {visibleColumns.firstName && <td>{user.first_name || '-'}</td>}
+                    {visibleColumns.lastName && <td>{user.last_name || '-'}</td>}
+                    {visibleColumns.phone && <td>{user.phone || '-'}</td>}
+                    {visibleColumns.email && <td>{user.email || '-'}</td>}
+                    {visibleColumns.position && <td>{user.position?.name || '-'}</td>}
+                    {visibleColumns.testsPassed && (
+                      <td>
+                        {user.tests_total_count > 0 ? (
+                          <div style={{ fontSize: '13px' }}>
+                            <div>
+                              <strong style={{ color: '#28a745' }}>
+                                ✅ {user.tests_passed_count || 0}
+                              </strong>
+                              {' / '}
+                              <span>{user.tests_total_count || 0}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <span style={{ color: '#999' }}>-</span>
+                        )}
+                      </td>
+                    )}
+                    {visibleColumns.telegramId && <td>{user.telegram_id || '-'}</td>}
+                    {visibleColumns.status && (
+                      <td>
+                        {user.is_blocked ? (
+                          <span style={{ color: '#dc3545' }}>🚫 Bloklangan</span>
+                        ) : (
+                          <span style={{ color: '#28a745' }}>✅ Faol</span>
+                        )}
+                      </td>
+                    )}
+                    {visibleColumns.bestScore && (
+                      <td>
+                        {user.best_score !== null ? (
+                          <strong>{user.best_score}%</strong>
+                        ) : (
+                          <span style={{ color: '#999' }}>-</span>
+                        )}
+                      </td>
+                    )}
+                    <td>{user.created_at ? new Date(user.created_at).toLocaleDateString('uz-UZ') : '-'}</td>
+                    <td>
+                      <button 
+                        className="btn" 
+                        onClick={() => handleUserClick(user)}
+                        style={{ padding: '6px 12px', fontSize: '14px' }}
+                      >
+                        <Icon name="eye" size={14} color="currentColor" /> Ko'rish
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           
           {totalPages > 1 && (
             <div style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'center' }}>

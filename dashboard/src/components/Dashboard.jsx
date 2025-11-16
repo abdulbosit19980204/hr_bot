@@ -7,6 +7,7 @@ import TestsList from './TestsList'
 import CVsList from './CVsList'
 import NotificationsList from './NotificationsList'
 import PositionsList from './PositionsList'
+import { Icon } from './Icons'
 import './Dashboard.css'
 
 function Dashboard({ onLogout, apiBaseUrl }) {
@@ -47,13 +48,13 @@ function Dashboard({ onLogout, apiBaseUrl }) {
   }
 
   const menuItems = [
-    { id: 'statistics', icon: '📊', label: 'Statistika' },
-    { id: 'results', icon: '📋', label: 'Natijalar' },
-    { id: 'users', icon: '👥', label: 'Foydalanuvchilar' },
-    { id: 'tests', icon: '📝', label: 'Testlar' },
-    { id: 'cvs', icon: '📄', label: 'CV\'lar' },
-    { id: 'notifications', icon: '📬', label: 'Xabarlar' },
-    { id: 'positions', icon: '💼', label: 'Lavozimlar' }
+    { id: 'statistics', icon: 'chart-bar', label: 'Statistika' },
+    { id: 'results', icon: 'clipboard-list', label: 'Natijalar' },
+    { id: 'users', icon: 'users', label: 'Foydalanuvchilar' },
+    { id: 'tests', icon: 'clipboard-check', label: 'Testlar' },
+    { id: 'cvs', icon: 'file-text', label: 'CV\'lar' },
+    { id: 'notifications', icon: 'bell', label: 'Xabarlar' },
+    { id: 'positions', icon: 'briefcase', label: 'Lavozimlar' }
   ]
 
   return (
@@ -80,7 +81,7 @@ function Dashboard({ onLogout, apiBaseUrl }) {
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             title={sidebarCollapsed ? 'Kengaytirish' : 'Qisqartirish'}
           >
-            {sidebarCollapsed ? '→' : '←'}
+            <Icon name={sidebarCollapsed ? 'chevron-right' : 'chevron-left'} size={18} color="currentColor" />
           </button>
         </div>
 
@@ -95,7 +96,9 @@ function Dashboard({ onLogout, apiBaseUrl }) {
               }}
               title={sidebarCollapsed ? item.label : ''}
             >
-              <span className="sidebar-icon">{item.icon}</span>
+              <span className="sidebar-icon">
+                <Icon name={item.icon} size={20} color={activeTab === item.id ? '#FFFFFF' : 'currentColor'} />
+              </span>
               {!sidebarCollapsed && <span className="sidebar-label">{item.label}</span>}
             </button>
           ))}
@@ -107,7 +110,9 @@ function Dashboard({ onLogout, apiBaseUrl }) {
             onClick={onLogout}
             title={sidebarCollapsed ? 'Chiqish' : ''}
           >
-            <span className="sidebar-icon">🚪</span>
+            <span className="sidebar-icon">
+              <Icon name="log-out" size={20} color="currentColor" />
+            </span>
             {!sidebarCollapsed && <span className="sidebar-label">Chiqish</span>}
           </button>
         </div>
@@ -121,7 +126,7 @@ function Dashboard({ onLogout, apiBaseUrl }) {
             className="mobile-menu-toggle"
             onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
           >
-            ☰
+            <Icon name="menu" size={20} color="currentColor" />
           </button>
           <h1 className="dashboard-title">
             {menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}

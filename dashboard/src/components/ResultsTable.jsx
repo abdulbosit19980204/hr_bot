@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
+import { Icon } from './Icons'
 import './Dashboard.css'
 
 function ResultsTable({ apiBaseUrl }) {
@@ -400,7 +401,7 @@ function ResultsTable({ apiBaseUrl }) {
             style={{ margin: 0, background: '#6c757d', position: 'relative' }}
             title="Ustunlarni boshqarish"
           >
-            ⚙️ Ustunlar
+            <Icon name="settings" size={16} color="white" /> Ustunlar
           </button>
           {selectedCandidates.size > 0 && (
             <button
@@ -408,7 +409,7 @@ function ResultsTable({ apiBaseUrl }) {
               onClick={() => setShowNotificationModal(true)}
               style={{ margin: 0, background: '#28a745' }}
             >
-              📨 Notification yuborish ({selectedCandidates.size})
+              <Icon name="bell" size={16} color="white" /> Notification ({selectedCandidates.size})
             </button>
           )}
           <button
@@ -417,7 +418,7 @@ function ResultsTable({ apiBaseUrl }) {
             style={{ margin: 0, background: '#229ED9' }}
             title="Excel formatida export qilish"
           >
-            ⬇ Excel
+            <Icon name="download" size={16} color="white" /> Excel
           </button>
           <button
             className="btn"
@@ -425,7 +426,7 @@ function ResultsTable({ apiBaseUrl }) {
             style={{ margin: 0, background: '#6c757d' }}
             title="CSV formatida export qilish"
           >
-            ⬇ CSV
+            <Icon name="download" size={16} color="white" /> CSV
           </button>
           <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px' }}>
             <input
