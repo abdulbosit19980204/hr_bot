@@ -1660,7 +1660,7 @@ class TestResultViewSet(viewsets.ModelViewSet):
 
 class StatisticsView(APIView):
     """Statistics view - Production-safe aggregated statistics"""
-    permission_classes = [IsAuthenticated]  # Production'da authentication talab qilamiz
+    permission_classes = [AllowAny]  # Frontend uchun ochiq, lekin production'da IsAuthenticated qo'yish mumkin
     authentication_classes = []  # Allow token authentication
 
     def get(self, request):
