@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { Icon } from './Icons'
+import Pagination from './Pagination'
 import './Dashboard.css'
 
 function PositionsList({ apiBaseUrl }) {
@@ -10,7 +11,9 @@ function PositionsList({ apiBaseUrl }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [isOpenFilter, setIsOpenFilter] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [totalPages, setTotalPages] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
   const [isSuperuser, setIsSuperuser] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -38,7 +41,7 @@ function PositionsList({ apiBaseUrl }) {
   useEffect(() => {
     loadPositions()
     checkSuperuser()
-  }, [page, searchTerm, isOpenFilter])
+  }, [page, pageSize, searchTerm, isOpenFilter])
 
   const checkSuperuser = async () => {
     try {
@@ -257,28 +260,27 @@ function PositionsList({ apiBaseUrl }) {
         <h3 style={{ margin: 0 }}>Lavozimlar</h3>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
-            className="btn"
+            className="btn-icon"
             onClick={() => setShowFilters(!showFilters)}
-            style={{ margin: 0, background: '#6c757d' }}
-            title="Filtrlarni ko'rsatish/yashirish"
+            title={showFilters ? "Filtrlarni yashirish" : "Filtrlarni ko'rsatish"}
           >
-            <Icon name="filter" size={16} color="white" /> {showFilters ? 'Filtrlarni yashirish' : 'Filtrlarni ko\'rsatish'}
+            <Icon name="filter" size={18} color="currentColor" />
           </button>
           <button
-            className="btn"
+            className="btn-icon"
             onClick={() => setShowColumnSettings(!showColumnSettings)}
-            style={{ margin: 0, background: '#6c757d', position: 'relative' }}
+            style={{ position: 'relative' }}
             title="Ustunlarni boshqarish"
           >
-            <Icon name="settings" size={16} color="white" /> Ustunlar
+            <Icon name="settings" size={18} color="currentColor" />
           </button>
           {isSuperuser && (
             <button
-              className="btn"
+              className="btn-icon btn-icon-primary"
               onClick={handleCreate}
-              style={{ margin: 0, background: '#28a745' }}
+              title="Yangi lavozim qo'shish"
             >
-              <Icon name="plus" size={16} color="white" /> Yangi lavozim
+              <Icon name="plus" size={18} color="currentColor" />
             </button>
           )}
         </div>
@@ -431,31 +433,27 @@ function PositionsList({ apiBaseUrl }) {
                     {isSuperuser && (
                       <td>
                         <button
-                          className="btn"
+                          className="btn-icon"
                           onClick={() => handleEdit(position)}
                           style={{ 
-                            padding: '6px 12px', 
-                            fontSize: '14px', 
                             marginRight: '5px',
                             background: '#229ED9',
                             color: 'white'
                           }}
                           title="Tahrirlash"
                         >
-                          <Icon name="pencil" size={14} color="white" />
+                          <Icon name="pencil" size={18} color="currentColor" />
                         </button>
                         <button
-                          className="btn"
+                          className="btn-icon"
                           onClick={() => handleDelete(position.id)}
                           style={{ 
-                            padding: '6px 12px', 
-                            fontSize: '14px',
                             background: '#dc3545',
                             color: 'white'
                           }}
                           title="O'chirish"
                         >
-                          <Icon name="trash" size={14} color="white" />
+                          <Icon name="trash" size={18} color="currentColor" />
                         </button>
                       </td>
                     )}

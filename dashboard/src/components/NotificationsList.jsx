@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { Icon } from './Icons'
+import Pagination from './Pagination'
 import './Dashboard.css'
 
 function NotificationsList({ apiBaseUrl }) {
@@ -10,7 +11,9 @@ function NotificationsList({ apiBaseUrl }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedNotification, setSelectedNotification] = useState(null)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [totalPages, setTotalPages] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
   const [sendToAllFilter, setSendToAllFilter] = useState('')
   const [showColumnSettings, setShowColumnSettings] = useState(false)
   const [showFilters, setShowFilters] = useState(true)
@@ -28,7 +31,7 @@ function NotificationsList({ apiBaseUrl }) {
 
   useEffect(() => {
     loadNotifications()
-  }, [page, searchTerm, sendToAllFilter])
+  }, [page, pageSize, searchTerm, sendToAllFilter])
 
   const loadNotifications = async () => {
     try {
@@ -204,20 +207,19 @@ function NotificationsList({ apiBaseUrl }) {
         <h3 style={{ margin: 0 }}>Xabarlar</h3>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
-            className="btn"
+            className="btn-icon"
             onClick={() => setShowFilters(!showFilters)}
-            style={{ margin: 0, background: '#6c757d' }}
-            title="Filtrlarni ko'rsatish/yashirish"
+            title={showFilters ? "Filtrlarni yashirish" : "Filtrlarni ko'rsatish"}
           >
-            <Icon name="filter" size={16} color="white" /> {showFilters ? 'Filtrlarni yashirish' : 'Filtrlarni ko\'rsatish'}
+            <Icon name="filter" size={18} color="currentColor" />
           </button>
           <button
-            className="btn"
+            className="btn-icon"
             onClick={() => setShowColumnSettings(!showColumnSettings)}
-            style={{ margin: 0, background: '#6c757d', position: 'relative' }}
+            style={{ position: 'relative' }}
             title="Ustunlarni boshqarish"
           >
-            <Icon name="settings" size={16} color="white" /> Ustunlar
+            <Icon name="settings" size={18} color="currentColor" />
           </button>
         </div>
       </div>
@@ -381,11 +383,11 @@ function NotificationsList({ apiBaseUrl }) {
                     )}
                     <td>
                       <button 
-                        className="btn" 
+                        className="btn-icon" 
                         onClick={() => handleNotificationClick(notification)}
-                        style={{ padding: '6px 12px', fontSize: '14px' }}
+                        title="Ko'rish"
                       >
-                        <Icon name="eye" size={14} color="currentColor" /> Ko'rish
+                        <Icon name="eye" size={18} color="currentColor" />
                       </button>
                     </td>
                   </tr>

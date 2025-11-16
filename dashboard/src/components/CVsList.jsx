@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import CVDetail from './CVDetail'
 import { Icon } from './Icons'
+import Pagination from './Pagination'
 import './Dashboard.css'
 
 function CVsList({ apiBaseUrl }) {
@@ -12,7 +13,9 @@ function CVsList({ apiBaseUrl }) {
   const [selectedUser, setSelectedUser] = useState('')
   const [users, setUsers] = useState([])
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [totalPages, setTotalPages] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
   const [selectedCV, setSelectedCV] = useState(null)
   const [selectedCVs, setSelectedCVs] = useState([])
   const [showColumnSettings, setShowColumnSettings] = useState(false)
@@ -32,7 +35,7 @@ function CVsList({ apiBaseUrl }) {
   useEffect(() => {
     loadUsers()
     loadCVs()
-  }, [page, searchTerm, selectedUser])
+  }, [page, pageSize, searchTerm, selectedUser])
 
   const loadUsers = async () => {
     try {
@@ -63,6 +66,7 @@ function CVsList({ apiBaseUrl }) {
       
       const params = {
         page,
+        page_size: pageSize,
         user: selectedUser || undefined
       }
       
@@ -90,7 +94,8 @@ function CVsList({ apiBaseUrl }) {
       
       setCvs(cvList)
       if (response.data.count) {
-        setTotalPages(Math.ceil(response.data.count / 20))
+        setTotalCount(response.data.count)
+        setTotalPages(Math.ceil(response.data.count / pageSize))
       }
       setLoading(false)
     } catch (err) {
@@ -218,29 +223,27 @@ function CVsList({ apiBaseUrl }) {
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
-            className="btn"
+            className="btn-icon"
             onClick={() => setShowFilters(!showFilters)}
-            style={{ margin: 0, background: '#6c757d' }}
-            title="Filtrlarni ko'rsatish/yashirish"
+            title={showFilters ? "Filtrlarni yashirish" : "Filtrlarni ko'rsatish"}
           >
-            <Icon name="filter" size={16} color="white" /> {showFilters ? 'Filtrlarni yashirish' : 'Filtrlarni ko\'rsatish'}
+            <Icon name="filter" size={18} color="currentColor" />
           </button>
           <button
-            className="btn"
+            className="btn-icon"
             onClick={() => setShowColumnSettings(!showColumnSettings)}
-            style={{ margin: 0, background: '#6c757d', position: 'relative' }}
+            style={{ position: 'relative' }}
             title="Ustunlarni boshqarish"
           >
-            <Icon name="settings" size={16} color="white" /> Ustunlar
+            <Icon name="settings" size={18} color="currentColor" />
           </button>
           {selectedCVs.length > 0 && (
             <button
-              className="btn"
+              className="btn-icon btn-icon-primary"
               onClick={handleDownloadZip}
-              style={{ margin: 0, background: '#28a745' }}
-              title="Tanlangan CV'larni ZIP formatida yuklab olish"
+              title={`Tanlangan CV'larni ZIP formatida yuklab olish (${selectedCVs.length})`}
             >
-              <Icon name="package" size={16} color="white" /> Yuklab olish ({selectedCVs.length})
+              <Icon name="download" size={18} color="currentColor" />
             </button>
           )}
         </div>
@@ -401,11 +404,11 @@ function CVsList({ apiBaseUrl }) {
                     {visibleColumns.uploadedAt && <td>{cv.uploaded_at ? new Date(cv.uploaded_at).toLocaleDateString('uz-UZ') : '-'}</td>}
                     <td>
                       <button 
-                        className="btn" 
+                        className="btn-icon" 
                         onClick={() => handleCVClick(cv)}
-                        style={{ padding: '6px 12px', fontSize: '14px' }}
+                        title="Ko'rish"
                       >
-                        <Icon name="eye" size={14} color="currentColor" /> Ko'rish
+                        <Icon name="eye" size={18} color="currentColor" />
                       </button>
                     </td>
                   </tr>
@@ -414,27 +417,14 @@ function CVsList({ apiBaseUrl }) {
             </table>
           </div>
           
-          {totalPages > 1 && (
-            <div style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'center' }}>
-              <button
-                className="btn"
-                onClick={() => setPage(page - 1)}
-                disabled={page === 1}
-              >
-                Oldingi
-              </button>
-              <span style={{ padding: '8px 16px', display: 'flex', alignItems: 'center' }}>
-                {page} / {totalPages}
-              </span>
-              <button
-                className="btn"
-                onClick={() => setPage(page + 1)}
-                disabled={page === totalPages}
-              >
-                Keyingi
-              </button>
-            </div>
-          )}
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            totalCount={totalCount}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </>
       )}
     </div>

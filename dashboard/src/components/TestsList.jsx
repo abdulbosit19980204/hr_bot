@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import TestDetail from './TestDetail'
 import { Icon } from './Icons'
+import Pagination from './Pagination'
 import './Dashboard.css'
 
 function TestsList({ apiBaseUrl }) {
@@ -13,7 +14,9 @@ function TestsList({ apiBaseUrl }) {
   const [statusFilter, setStatusFilter] = useState('active')
   const [positions, setPositions] = useState([])
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [totalPages, setTotalPages] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
   const [selectedTest, setSelectedTest] = useState(null)
   const [isSuperuser, setIsSuperuser] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -40,7 +43,7 @@ function TestsList({ apiBaseUrl }) {
     loadPositions()
     loadTests()
     checkSuperuser()
-  }, [page, searchTerm, selectedPosition, statusFilter])
+  }, [page, pageSize, searchTerm, selectedPosition, statusFilter])
   
   const checkSuperuser = async () => {
     try {
@@ -123,6 +126,7 @@ function TestsList({ apiBaseUrl }) {
       
       const params = {
         page,
+        page_size: pageSize,
         search: searchTerm || undefined,
         positions: selectedPosition || undefined
       }
@@ -145,7 +149,8 @@ function TestsList({ apiBaseUrl }) {
       
       setTests(response.data.results || response.data)
       if (response.data.count) {
-        setTotalPages(Math.ceil(response.data.count / 20))
+        setTotalCount(response.data.count)
+        setTotalPages(Math.ceil(response.data.count / pageSize))
       }
       setLoading(false)
     } catch (err) {
@@ -357,49 +362,46 @@ function TestsList({ apiBaseUrl }) {
         <h3 style={{ margin: 0 }}>Testlar</h3>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
-            className="btn"
+            className="btn-icon"
             onClick={() => setShowFilters(!showFilters)}
-            style={{ margin: 0, background: '#6c757d' }}
-            title="Filtrlarni ko'rsatish/yashirish"
+            title={showFilters ? "Filtrlarni yashirish" : "Filtrlarni ko'rsatish"}
           >
-            <Icon name="filter" size={16} color="white" /> {showFilters ? 'Filtrlarni yashirish' : 'Filtrlarni ko\'rsatish'}
+            <Icon name="filter" size={18} color="currentColor" />
           </button>
           <button
-            className="btn"
+            className="btn-icon"
             onClick={() => setShowColumnSettings(!showColumnSettings)}
-            style={{ margin: 0, background: '#6c757d', position: 'relative' }}
+            style={{ position: 'relative' }}
             title="Ustunlarni boshqarish"
           >
-            <Icon name="settings" size={16} color="white" /> Ustunlar
+            <Icon name="settings" size={18} color="currentColor" />
           </button>
           <button
-            className="btn"
+            className="btn-icon btn-icon-primary"
             onClick={handleExportExcel}
-            style={{ margin: 0, background: '#229ED9' }}
             title="Excel formatida export qilish"
           >
-            <Icon name="download" size={16} color="white" /> Excel
+            <Icon name="download" size={18} color="currentColor" />
           </button>
           <button
-            className="btn"
+            className="btn-icon"
             onClick={handleExportCSV}
-            style={{ margin: 0, background: '#6c757d' }}
             title="CSV formatida export qilish"
           >
-            <Icon name="download" size={16} color="white" /> CSV
+            <Icon name="download" size={18} color="currentColor" />
           </button>
           {isSuperuser && (
             <>
               <button
-                className="btn"
+                className="btn-icon btn-icon-primary"
                 onClick={() => setShowCreateModal(true)}
-                style={{ background: '#28a745', margin: 0 }}
+                title="Yangi test qo'shish"
               >
-                <Icon name="plus" size={16} color="white" /> Yangi test
+                <Icon name="plus" size={18} color="currentColor" />
               </button>
               <label 
-                className="btn" 
-                style={{ background: '#229ED9', cursor: 'pointer', display: 'inline-block', margin: 0 }}
+                className="btn-icon btn-icon-primary"
+                style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                 title="Excel fayldan to'liq test import qilish"
               >
                 <input
@@ -410,13 +412,9 @@ function TestsList({ apiBaseUrl }) {
                   disabled={importingTest}
                 />
                 {importingTest ? (
-                  <>
-                    <Icon name="check" size={16} color="white" /> Import qilinmoqda...
-                  </>
+                  <Icon name="check" size={18} color="currentColor" />
                 ) : (
-                  <>
-                    <Icon name="upload" size={16} color="white" /> Test import
-                  </>
+                  <Icon name="upload" size={18} color="currentColor" />
                 )}
               </label>
             </>
@@ -598,11 +596,10 @@ function TestsList({ apiBaseUrl }) {
                       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
                         <button
                           onClick={() => handleTestClick(test)}
-                          className="btn"
-                          style={{ padding: '6px 12px', fontSize: '14px' }}
+                          className="btn-icon"
                           title="Ko'rish"
                         >
-                          <Icon name="eye" size={14} color="currentColor" />
+                          <Icon name="eye" size={18} color="currentColor" />
                         </button>
                         {isSuperuser && (
                           <>
@@ -611,11 +608,11 @@ function TestsList({ apiBaseUrl }) {
                                 setEditingTest(test)
                                 setShowEditModal(true)
                               }}
-                              className="btn"
-                              style={{ padding: '6px 12px', fontSize: '14px', background: '#ffc107', color: 'white' }}
+                              className="btn-icon"
+                              style={{ background: '#ffc107', color: 'white' }}
                               title="Tahrirlash"
                             >
-                              <Icon name="pencil" size={14} color="white" />
+                              <Icon name="pencil" size={18} color="currentColor" />
                             </button>
                             <button
                               onClick={() => {
@@ -623,14 +620,14 @@ function TestsList({ apiBaseUrl }) {
                                   handleDeleteTest(test.id)
                                 }
                               }}
-                              className="btn"
-                              style={{ padding: '6px 12px', fontSize: '14px', background: '#dc3545', color: 'white' }}
+                              className="btn-icon"
+                              style={{ background: '#dc3545', color: 'white' }}
                               title="O'chirish"
                             >
-                              <Icon name="trash" size={14} color="white" />
+                              <Icon name="trash" size={18} color="currentColor" />
                             </button>
-                        </>
-                      )}
+                          </>
+                        )}
                     </div>
                   </td>
                 </tr>
