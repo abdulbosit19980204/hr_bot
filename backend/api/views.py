@@ -197,23 +197,29 @@ class TestViewSet(viewsets.ModelViewSet):
             # Create workbook
             wb = Workbook()
             ws = wb.active
-            ws.title = "Test Questions"
+            ws.title = "Test Template"
             
-            # Test info
-            ws.cell(row=1, column=1).value = "Test ID:"
-            ws.cell(row=1, column=2).value = test.id
-            ws.cell(row=2, column=1).value = "Test nomi:"
-            ws.cell(row=2, column=2).value = test.title
-            ws.cell(row=3, column=1).value = "Tavsif:"
-            ws.cell(row=3, column=2).value = test.description or ""
-            ws.cell(row=4, column=1).value = "Savollar soni:"
-            ws.cell(row=4, column=2).value = questions.count()
+            # Test info headers (same format as admin panel)
+            ws.cell(row=1, column=1).value = "Title:"
+            ws.cell(row=2, column=1).value = "Description:"
+            ws.cell(row=3, column=1).value = "Position:"
+            ws.cell(row=4, column=1).value = "Time Limit (minutes):"
+            ws.cell(row=5, column=1).value = "Passing Score (%):"
             
-            # Empty row
-            row = 6
+            # Test data
+            ws.cell(row=1, column=2).value = test.title
+            ws.cell(row=2, column=2).value = test.description or ""
+            # Get first position name
+            first_position = test.positions.first()
+            ws.cell(row=3, column=2).value = first_position.name if first_position else ""
+            ws.cell(row=4, column=2).value = test.time_limit
+            ws.cell(row=5, column=2).value = test.passing_score
             
-            # Headers
-            headers = ['Savol', 'Variant 1', 'Variant 2', 'Variant 3', 'Variant 4', 'To\'g\'ri javob']
+            # Empty row (row 6)
+            row = 7
+            
+            # Question headers (row 7)
+            headers = ['Question', 'Option 1', 'Option 2', 'Option 3', 'Option 4', 'Correct Answer (1-4)']
             for col, header in enumerate(headers, start=1):
                 cell = ws.cell(row=row, column=col)
                 cell.value = header
@@ -223,12 +229,12 @@ class TestViewSet(viewsets.ModelViewSet):
             
             row += 1
             
-            # Questions
+            # Questions (starting from row 8)
             for question in questions:
                 options = list(question.options.all().order_by('order', 'id'))
                 correct_option_num = None
                 
-                # Find correct option number
+                # Find correct option number (1-4)
                 for idx, opt in enumerate(options[:4], start=1):
                     if opt.is_correct:
                         correct_option_num = idx
@@ -241,7 +247,7 @@ class TestViewSet(viewsets.ModelViewSet):
                 for idx, opt in enumerate(options[:4], start=1):
                     ws.cell(row=row, column=idx + 1).value = opt.text
                 
-                # Correct answer
+                # Correct answer (1-4)
                 ws.cell(row=row, column=6).value = correct_option_num if correct_option_num else ""
                 
                 row += 1
@@ -269,7 +275,7 @@ class TestViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def import_questions(self, request, pk=None):
-        """Import questions from Excel file - only for superusers"""
+        """Import questions from Excel file to existing test - only for superusers"""
         if not request.user.is_authenticated or not request.user.is_superuser:
             return Response(
                 {'error': 'Permission denied. Superuser access required.'},
@@ -294,12 +300,19 @@ class TestViewSet(viewsets.ModelViewSet):
             imported_count = 0
             errors = []
             
-            # Find questions start row (skip test info, find headers)
-            start_row = 1
-            for row in range(1, 20):
-                if ws.cell(row=row, column=1).value and 'Savol' in str(ws.cell(row=row, column=1).value):
-                    start_row = row + 1
-                    break
+            # Find questions start row (row 7 is header, row 8+ are questions)
+            start_row = 8
+            # Check if row 7 has headers
+            header_cell = ws.cell(row=7, column=1).value
+            if header_cell and ('Question' in str(header_cell) or 'Savol' in str(header_cell)):
+                start_row = 8
+            else:
+                # Try to find header row
+                for row in range(1, 20):
+                    cell_value = ws.cell(row=row, column=1).value
+                    if cell_value and ('Question' in str(cell_value) or 'Savol' in str(cell_value)):
+                        start_row = row + 1
+                        break
             
             # Process questions
             for row in range(start_row, ws.max_row + 1):
@@ -309,10 +322,16 @@ class TestViewSet(viewsets.ModelViewSet):
                 if not question_text or not str(question_text).strip():
                     continue
                 
+                # Skip if it's a header row
+                if isinstance(question_text, str):
+                    question_text_lower = str(question_text).lower()
+                    if 'question' in question_text_lower or 'option' in question_text_lower or 'savol' in question_text_lower:
+                        continue
+                
                 try:
                     # Get options
                     options = []
-                    for col in range(2, 6):  # Columns B-E (variants 1-4)
+                    for col in range(2, 6):  # Columns B-E (Option 1-4)
                         option_text = ws.cell(row=row, column=col).value
                         if option_text and str(option_text).strip():
                             options.append(str(option_text).strip())
@@ -321,7 +340,7 @@ class TestViewSet(viewsets.ModelViewSet):
                         errors.append(f"Qator {row}: Variantlar topilmadi")
                         continue
                     
-                    # Get correct answer
+                    # Get correct answer (column 6)
                     correct_answer = ws.cell(row=row, column=6).value
                     correct_option_num = None
                     if correct_answer:
@@ -355,14 +374,172 @@ class TestViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     errors.append(f"Qator {row}: {str(e)}")
             
-            return Response({
+            response_data = {
                 'success': True,
                 'imported_count': imported_count,
-                'errors': errors if errors else None
-            }, status=status.HTTP_201_CREATED)
+                'test_id': test.id,
+                'test_title': test.title
+            }
+            
+            if errors:
+                response_data['errors'] = errors
+            
+            return Response(response_data, status=status.HTTP_201_CREATED)
             
         except Exception as e:
             logger.error(f'Error importing questions: {str(e)}')
+            return Response(
+                {'error': f'Import failed: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+    def import_test(self, request):
+        """Import full test from Excel file - only for superusers"""
+        if not request.user.is_authenticated or not request.user.is_superuser:
+            return Response(
+                {'error': 'Permission denied. Superuser access required.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        try:
+            if 'file' not in request.FILES:
+                return Response(
+                    {'error': 'Excel file is required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            excel_file = request.FILES['file']
+            
+            # Load workbook
+            wb = load_workbook(excel_file, data_only=True)
+            ws = wb.active
+            
+            # Read test info (rows 1-5)
+            test_title = ws.cell(row=1, column=2).value or ''
+            test_description = ws.cell(row=2, column=2).value or ''
+            position_name = ws.cell(row=3, column=2).value or ''
+            time_limit = ws.cell(row=4, column=2).value
+            passing_score = ws.cell(row=5, column=2).value
+            
+            # Create new test
+            try:
+                time_limit = int(time_limit) if time_limit else 60
+                passing_score = int(passing_score) if passing_score else 60
+            except (ValueError, TypeError):
+                time_limit = 60
+                passing_score = 60
+            
+            test_data = {
+                'title': str(test_title).strip() if test_title else 'Imported Test',
+                'description': str(test_description).strip() if test_description else '',
+                'time_limit': time_limit,
+                'passing_score': passing_score,
+            }
+            
+            test = Test.objects.create(**test_data)
+            
+            # Handle position
+            if position_name:
+                from users.models import Position
+                position, created = Position.objects.get_or_create(
+                    name=str(position_name).strip(),
+                    defaults={'is_open': True, 'description': ''}
+                )
+                test.positions.add(position)
+            
+            imported_count = 0
+            errors = []
+            
+            # Find questions start row (row 7 is header, row 8+ are questions)
+            start_row = 8
+            # Check if row 7 has headers
+            header_cell = ws.cell(row=7, column=1).value
+            if header_cell and ('Question' in str(header_cell) or 'Savol' in str(header_cell)):
+                start_row = 8
+            else:
+                # Try to find header row
+                for row in range(1, 20):
+                    cell_value = ws.cell(row=row, column=1).value
+                    if cell_value and ('Question' in str(cell_value) or 'Savol' in str(cell_value)):
+                        start_row = row + 1
+                        break
+            
+            # Process questions
+            for row in range(start_row, ws.max_row + 1):
+                question_text = ws.cell(row=row, column=1).value
+                
+                # Skip empty rows
+                if not question_text or not str(question_text).strip():
+                    continue
+                
+                # Skip if it's a header row
+                if isinstance(question_text, str):
+                    question_text_lower = str(question_text).lower()
+                    if 'question' in question_text_lower or 'option' in question_text_lower or 'savol' in question_text_lower:
+                        continue
+                
+                try:
+                    # Get options
+                    options = []
+                    for col in range(2, 6):  # Columns B-E (Option 1-4)
+                        option_text = ws.cell(row=row, column=col).value
+                        if option_text and str(option_text).strip():
+                            options.append(str(option_text).strip())
+                    
+                    if not options:
+                        errors.append(f"Qator {row}: Variantlar topilmadi")
+                        continue
+                    
+                    # Get correct answer (column 6)
+                    correct_answer = ws.cell(row=row, column=6).value
+                    correct_option_num = None
+                    if correct_answer:
+                        try:
+                            correct_option_num = int(correct_answer)
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    if not correct_option_num or correct_option_num < 1 or correct_option_num > len(options):
+                        errors.append(f"Qator {row}: To'g'ri javob noto'g'ri (1-{len(options)} orasida bo'lishi kerak)")
+                        continue
+                    
+                    # Create question
+                    question = Question.objects.create(
+                        test=test,
+                        text=str(question_text).strip(),
+                        order=imported_count
+                    )
+                    
+                    # Create answer options
+                    for idx, opt_text in enumerate(options, start=1):
+                        AnswerOption.objects.create(
+                            question=question,
+                            text=opt_text,
+                            is_correct=(idx == correct_option_num),
+                            order=idx - 1
+                        )
+                    
+                    imported_count += 1
+                    
+                except Exception as e:
+                    errors.append(f"Qator {row}: {str(e)}")
+            
+            response_data = {
+                'success': True,
+                'imported_count': imported_count,
+                'test_id': test.id,
+                'test_title': test.title,
+                'test_created': True
+            }
+            
+            if errors:
+                response_data['errors'] = errors
+            
+            return Response(response_data, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            logger.error(f'Error importing test: {str(e)}')
             return Response(
                 {'error': f'Import failed: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST

@@ -18,6 +18,7 @@ function TestsList({ apiBaseUrl }) {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingTest, setEditingTest] = useState(null)
+  const [importingTest, setImportingTest] = useState(false)
 
   useEffect(() => {
     loadPositions()
@@ -169,6 +170,66 @@ function TestsList({ apiBaseUrl }) {
     } catch (err) {
       console.error('Error deleting test:', err)
       alert(err.response?.data?.error || err.response?.data?.detail || 'Test o\'chirishda xatolik yuz berdi')
+    }
+  }
+
+  const handleImportTest = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    
+    // Validate file type
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+      alert('Faqat Excel fayllar (.xlsx, .xls) qabul qilinadi!')
+      e.target.value = '' // Reset file input
+      return
+    }
+    
+    try {
+      setImportingTest(true)
+      
+      // Confirm import
+      if (!window.confirm('Excel fayldan to\'liq testni import qilishni tasdiqlaysizmi?')) {
+        e.target.value = '' // Reset file input
+        setImportingTest(false)
+        return
+      }
+      
+      const token = localStorage.getItem('access_token')
+      
+      // Create FormData for file upload
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      // Send to backend
+      const response = await axios.post(
+        `${apiBaseUrl}/tests/import_test/`,
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      )
+      
+      if (response.data.success) {
+        const msg = `Test muvaffaqiyatli import qilindi!\nTest: "${response.data.test_title}"\nSavollar: ${response.data.imported_count} ta`
+        if (response.data.errors && response.data.errors.length > 0) {
+          alert(`${msg}\n\nXatoliklar:\n${response.data.errors.slice(0, 10).join('\n')}${response.data.errors.length > 10 ? `\n... va yana ${response.data.errors.length - 10} ta xatolik` : ''}`)
+        } else {
+          alert(msg)
+        }
+        
+        // Reload tests list
+        loadTests()
+      }
+      
+      e.target.value = '' // Reset file input
+    } catch (err) {
+      console.error('Error importing test:', err)
+      alert(err.response?.data?.error || 'Testni import qilishda xatolik yuz berdi')
+    } finally {
+      setImportingTest(false)
     }
   }
 
