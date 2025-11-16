@@ -13,6 +13,7 @@ function CVsList({ apiBaseUrl }) {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [selectedCV, setSelectedCV] = useState(null)
+  const [selectedCVs, setSelectedCVs] = useState([])
 
   useEffect(() => {
     loadUsers()
@@ -103,70 +104,52 @@ function CVsList({ apiBaseUrl }) {
     setSelectedCV(null)
   }
 
-  const handleExportExcel = async () => {
-    try {
-      const token = localStorage.getItem('access_token')
-      if (!token) {
-        alert('Export qilish uchun tizimga kirish kerak')
-        return
-      }
-      
-      const params = {
-        user: selectedUser || undefined
-      }
-      Object.keys(params).forEach(key => params[key] === undefined && delete params[key])
-      
-      const response = await axios.get(`${apiBaseUrl}/cvs/export_excel/`, {
-        params,
-        headers: { 'Authorization': `Bearer ${token}` },
-        responseType: 'blob'
-      })
-      
-      const url = window.URL.createObjectURL(new Blob([response.data]))
-      const link = document.createElement('a')
-      link.href = url
-      const contentDisposition = response.headers['content-disposition']
-      let filename = `cvs_${new Date().toISOString().split('T')[0]}.xlsx`
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i)
-        if (filenameMatch) filename = filenameMatch[1]
-      }
-      link.download = filename
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-      alert('CV\'lar muvaffaqiyatli Excel formatida export qilindi!')
-    } catch (err) {
-      console.error('Error exporting CVs:', err)
-      alert(err.response?.data?.error || 'CV\'larni export qilishda xatolik yuz berdi')
+  const handleSelectCV = (cvId) => {
+    setSelectedCVs(prev => 
+      prev.includes(cvId) 
+        ? prev.filter(id => id !== cvId)
+        : [...prev, cvId]
+    )
+  }
+
+  const handleSelectAll = () => {
+    if (selectedCVs.length === cvs.length) {
+      setSelectedCVs([])
+    } else {
+      setSelectedCVs(cvs.map(cv => cv.id))
     }
   }
 
-  const handleExportCSV = async () => {
+  const handleDownloadZip = async () => {
     try {
       const token = localStorage.getItem('access_token')
       if (!token) {
-        alert('Export qilish uchun tizimga kirish kerak')
+        alert('Yuklab olish uchun tizimga kirish kerak')
         return
       }
       
-      const params = {
-        user: selectedUser || undefined
+      if (selectedCVs.length === 0) {
+        alert('Yuklab olish uchun kamida bitta CV tanlang')
+        return
       }
-      Object.keys(params).forEach(key => params[key] === undefined && delete params[key])
       
-      const response = await axios.get(`${apiBaseUrl}/cvs/export_csv/`, {
-        params,
-        headers: { 'Authorization': `Bearer ${token}` },
-        responseType: 'blob'
-      })
+      const response = await axios.post(
+        `${apiBaseUrl}/cvs/download_zip/`,
+        { cv_ids: selectedCVs },
+        {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          responseType: 'blob'
+        }
+      )
       
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
       link.href = url
       const contentDisposition = response.headers['content-disposition']
-      let filename = `cvs_${new Date().toISOString().split('T')[0]}.csv`
+      let filename = `cvs_${new Date().toISOString().split('T')[0]}.zip`
       if (contentDisposition) {
         const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i)
         if (filenameMatch) filename = filenameMatch[1]
@@ -176,10 +159,11 @@ function CVsList({ apiBaseUrl }) {
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
-      alert('CV\'lar muvaffaqiyatli CSV formatida export qilindi!')
+      alert(`${selectedCVs.length} ta CV muvaffaqiyatli ZIP formatida yuklab olindi!`)
+      setSelectedCVs([])
     } catch (err) {
-      console.error('Error exporting CVs:', err)
-      alert(err.response?.data?.error || 'CV\'larni export qilishda xatolik yuz berdi')
+      console.error('Error downloading CVs:', err)
+      alert(err.response?.data?.error || 'CV\'larni yuklab olishda xatolik yuz berdi')
     }
   }
 
@@ -206,22 +190,16 @@ function CVsList({ apiBaseUrl }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <h3 style={{ margin: 0 }}>CV'lar</h3>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button
-            className="btn"
-            onClick={handleExportExcel}
-            style={{ margin: 0, background: '#229ED9' }}
-            title="Excel formatida export qilish"
-          >
-            ⬇ Excel
-          </button>
-          <button
-            className="btn"
-            onClick={handleExportCSV}
-            style={{ margin: 0, background: '#6c757d' }}
-            title="CSV formatida export qilish"
-          >
-            ⬇ CSV
-          </button>
+          {selectedCVs.length > 0 && (
+            <button
+              className="btn"
+              onClick={handleDownloadZip}
+              style={{ margin: 0, background: '#28a745' }}
+              title="Tanlangan CV'larni ZIP formatida yuklab olish"
+            >
+              📦 Yuklab olish ({selectedCVs.length})
+            </button>
+          )}
           <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px' }}>
             <input
               type="text"
@@ -275,6 +253,14 @@ function CVsList({ apiBaseUrl }) {
           <table>
             <thead>
               <tr>
+                <th style={{ width: '40px' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedCVs.length === cvs.length && cvs.length > 0}
+                    onChange={handleSelectAll}
+                    title="Barchasini tanlash"
+                  />
+                </th>
                 <th>ID</th>
                 <th>Foydalanuvchi</th>
                 <th>Telefon</th>
@@ -288,6 +274,13 @@ function CVsList({ apiBaseUrl }) {
             <tbody>
               {cvs.map((cv) => (
                 <tr key={cv.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedCVs.includes(cv.id)}
+                      onChange={() => handleSelectCV(cv.id)}
+                    />
+                  </td>
                   <td>{cv.id}</td>
                   <td>{cv.user?.first_name} {cv.user?.last_name}</td>
                   <td>{cv.user?.phone || '-'}</td>

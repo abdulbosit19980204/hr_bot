@@ -1383,48 +1383,79 @@ class CVViewSet(viewsets.ModelViewSet):
         wb.save(response)
         return response
     
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
-    def export_csv(self, request):
-        """Export CVs to CSV - only for authenticated users"""
-        import csv
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+    def download_zip(self, request):
+        """Download CV files as ZIP - only for authenticated users"""
+        import zipfile
+        import io
+        import os
         from django.http import HttpResponse
         from django.utils import timezone
+        from django.core.files.storage import default_storage
         
-        # Get filtered queryset
-        queryset = self.filter_queryset(self.get_queryset())
+        # Get CV IDs from request (can be list or single ID)
+        cv_ids = request.data.get('cv_ids', [])
+        if not cv_ids:
+            from rest_framework import status
+            from rest_framework.response import Response
+            return Response(
+                {'error': 'CV ID\'lar ko\'rsatilmagan'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        # If not staff, only allow export of own CVs
+        # If single ID, convert to list
+        if not isinstance(cv_ids, list):
+            cv_ids = [cv_ids]
+        
+        # Get CVs
+        queryset = CV.objects.filter(id__in=cv_ids)
+        
+        # If not staff, only allow download of own CVs
         if not request.user.is_staff:
             queryset = queryset.filter(user=request.user)
         
-        response = HttpResponse(content_type='text/csv; charset=utf-8')
-        filename = f"cvs_{timezone.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        if not queryset.exists():
+            from rest_framework import status
+            from rest_framework.response import Response
+            return Response(
+                {'error': 'CV\'lar topilmadi yoki ruxsat yo\'q'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Create ZIP file in memory
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for cv in queryset:
+                if cv.file and default_storage.exists(cv.file.name):
+                    try:
+                        # Get file content
+                        file_content = default_storage.open(cv.file.name).read()
+                        
+                        # Create filename: UserName_CV_ID_OriginalFileName
+                        user_name = f"{cv.user.first_name}_{cv.user.last_name}".strip() if cv.user else ''
+                        if not user_name and cv.user:
+                            user_name = cv.user.username
+                        if not user_name:
+                            user_name = 'Unknown'
+                        
+                        # Clean filename (remove invalid characters)
+                        user_name = "".join(c for c in user_name if c.isalnum() or c in (' ', '-', '_')).strip()
+                        user_name = user_name.replace(' ', '_')
+                        
+                        original_filename = cv.file.name.split('/')[-1]
+                        zip_filename = f"{user_name}_CV_{cv.id}_{original_filename}"
+                        
+                        # Add file to ZIP
+                        zip_file.writestr(zip_filename, file_content)
+                    except Exception as e:
+                        # Skip files that can't be read
+                        continue
+        
+        # Prepare response
+        zip_buffer.seek(0)
+        response = HttpResponse(zip_buffer.read(), content_type='application/zip')
+        filename = f"cvs_{timezone.now().strftime('%Y%m%d_%H%M%S')}.zip"
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        response.write('\ufeff')  # BOM for UTF-8
-        
-        writer = csv.writer(response)
-        writer.writerow(['ID', 'Foydalanuvchi', 'Email', 'Telefon', 'Fayl nomi', 'Fayl hajmi (KB)', 'Yuklangan sana'])
-        
-        for cv in queryset:
-            user_name = f"{cv.user.first_name} {cv.user.last_name}".strip() or cv.user.username if cv.user else ''
-            
-            # Get file size in KB
-            file_size_kb = 0
-            if cv.file:
-                try:
-                    file_size_kb = round(cv.file.size / 1024, 2) if hasattr(cv.file, 'size') else 0
-                except:
-                    file_size_kb = 0
-            
-            writer.writerow([
-                cv.id,
-                user_name,
-                cv.user.email if cv.user else '',
-                cv.user.phone if cv.user else '',
-                cv.file.name.split('/')[-1] if cv.file else '',
-                file_size_kb,
-                cv.uploaded_at.strftime('%Y-%m-%d %H:%M:%S') if cv.uploaded_at else ''
-            ])
         
         return response
 
