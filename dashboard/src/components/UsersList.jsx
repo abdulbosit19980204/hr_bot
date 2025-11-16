@@ -46,6 +46,25 @@ function UsersList({ apiBaseUrl }) {
     loadUsers()
   }, [page, pageSize, searchTerm, selectedPosition])
 
+  // Handle keyboard events for full-view toggle
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (fullView && (e.key === 'Escape' || (e.key === 'Enter' && e.target === document.activeElement))) {
+        setFullView(false)
+      }
+    }
+    if (fullView) {
+      document.addEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = ''
+    }
+  }, [fullView])
+
   const loadPositions = async () => {
     try {
       const token = localStorage.getItem('access_token')
@@ -317,25 +336,6 @@ function UsersList({ apiBaseUrl }) {
   if (error) {
     return <div className="error">{error}</div>
   }
-
-  // Handle keyboard events for full-view toggle
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (fullView && (e.key === 'Escape' || (e.key === 'Enter' && e.target === document.activeElement))) {
-        setFullView(false)
-      }
-    }
-    if (fullView) {
-      document.addEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = ''
-    }
-  }, [fullView])
 
   return (
     <>

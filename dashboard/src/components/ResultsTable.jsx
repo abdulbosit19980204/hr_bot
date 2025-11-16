@@ -50,6 +50,25 @@ function ResultsTable({ apiBaseUrl }) {
     loadResults()
   }, [page, pageSize, searchTerm, selectedTest, selectedUser, statusFilter, orderBy])
 
+  // Handle keyboard events for full-view toggle
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (fullView && (e.key === 'Escape' || (e.key === 'Enter' && e.target === document.activeElement))) {
+        setFullView(false)
+      }
+    }
+    if (fullView) {
+      document.addEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = ''
+    }
+  }, [fullView])
+
   const loadTests = async () => {
     try {
       const token = localStorage.getItem('access_token')
@@ -383,25 +402,6 @@ function ResultsTable({ apiBaseUrl }) {
   if (loading && results.length === 0) {
     return <div className="loading">Yuklanmoqda...</div>
   }
-
-  // Handle keyboard events for full-view toggle
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (fullView && (e.key === 'Escape' || (e.key === 'Enter' && e.target === document.activeElement))) {
-        setFullView(false)
-      }
-    }
-    if (fullView) {
-      document.addEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = ''
-    }
-  }, [fullView])
 
   return (
     <>
