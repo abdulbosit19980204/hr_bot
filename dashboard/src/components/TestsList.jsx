@@ -257,13 +257,29 @@ function TestsList({ apiBaseUrl }) {
         <h3 style={{ margin: 0 }}>Testlar</h3>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           {isSuperuser && (
-            <button
-              className="btn"
-              onClick={() => setShowCreateModal(true)}
-              style={{ background: '#28a745', margin: 0 }}
-            >
-              + Yangi test qo'shish
-            </button>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+              <button
+                className="btn"
+                onClick={() => setShowCreateModal(true)}
+                style={{ background: '#28a745', margin: 0 }}
+              >
+                + Yangi test qo'shish
+              </button>
+              <label 
+                className="btn" 
+                style={{ background: '#229ED9', cursor: 'pointer', display: 'inline-block', margin: 0 }}
+                title="Excel fayldan to'liq test import qilish"
+              >
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  style={{ display: 'none' }}
+                  onChange={handleImportTest}
+                  disabled={importingTest}
+                />
+                {importingTest ? '⏳ Import qilinmoqda...' : '📥 Test import qilish'}
+              </label>
+            </div>
           )}
           <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px' }}>
             <input
