@@ -271,23 +271,32 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
             <h3 style={{ margin: 0 }}>Test savollari ({questionsCount || testDetails?.questions_count || 0})</h3>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
               {showQuestions && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <label style={{ fontSize: '14px', color: '#666' }}>Har sahifada:</label>
-                  <select
-                    className="input"
-                    value={questionsPageSize}
-                    onChange={(e) => {
-                      setQuestionsPageSize(Number(e.target.value))
-                      setQuestionsPage(1) // Reset to first page when changing page size
-                    }}
-                    style={{ width: '80px', margin: 0, padding: '6px' }}
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ fontSize: '14px', color: '#666' }}>Har sahifada:</label>
+                    <select
+                      className="input"
+                      value={questionsPageSize}
+                      onChange={(e) => {
+                        setQuestionsPageSize(Number(e.target.value))
+                        setQuestionsPage(1) // Reset to first page when changing page size
+                      }}
+                      style={{ width: '80px', margin: 0, padding: '6px' }}
+                    >
+                      <option value="10">10</option>
+                      <option value="20">20</option>
+                      <option value="50">50</option>
+                      <option value="100">100</option>
+                    </select>
+                  </div>
+                  <span
+                    onClick={exportQuestions}
+                    style={{ fontSize: '18px', cursor: 'pointer', userSelect: 'none', color: '#28a745' }}
+                    title="Export qilish (JSON)"
                   >
-                    <option value="10">10</option>
-                    <option value="20">20</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                  </select>
-                </div>
+                    ⬇
+                  </span>
+                </>
               )}
               <button 
                 className="btn" 
