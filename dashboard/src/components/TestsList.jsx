@@ -14,11 +14,44 @@ function TestsList({ apiBaseUrl }) {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [selectedTest, setSelectedTest] = useState(null)
+  const [isSuperuser, setIsSuperuser] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
     loadPositions()
     loadTests()
+    checkSuperuser()
   }, [page, searchTerm, selectedPosition, statusFilter])
+  
+  const checkSuperuser = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        setIsSuperuser(false)
+        return
+      }
+      
+      const headers = {
+        'Authorization': `Bearer ${token}`
+      }
+      
+      // Try to access questions_list endpoint (superuser only)
+      // This is a lightweight check
+      await axios.get(`${apiBaseUrl}/tests/1/questions_list/`, {
+        headers,
+        params: { page: 1, page_size: 1 }
+      })
+      setIsSuperuser(true)
+    } catch (err) {
+      if (err.response?.status === 403 || err.response?.status === 404) {
+        setIsSuperuser(false)
+      } else {
+        // Other error - assume not superuser
+        setIsSuperuser(false)
+      }
+    }
+  }
 
   const loadPositions = async () => {
     try {
@@ -112,6 +145,15 @@ function TestsList({ apiBaseUrl }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <h3 style={{ margin: 0 }}>Testlar</h3>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {isSuperuser && (
+            <button
+              className="btn"
+              onClick={() => setShowCreateModal(true)}
+              style={{ background: '#28a745', margin: 0 }}
+            >
+              + Yangi test qo'shish
+            </button>
+          )}
           <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px' }}>
             <input
               type="text"
@@ -248,6 +290,328 @@ function TestsList({ apiBaseUrl }) {
           )}
         </>
       )}
+
+      {/* Create Test Modal */}
+      {showCreateModal && (
+        <CreateTestModal
+          apiBaseUrl={apiBaseUrl}
+          positions={positions}
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={() => {
+            setShowCreateModal(false)
+            loadTests()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// Create Test Modal Component
+function CreateTestModal({ apiBaseUrl, positions, onClose, onSuccess }) {
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    position_ids: [],
+    time_limit: 60,
+    passing_score: 60,
+    test_mode: 'both',
+    random_questions_count: 0,
+    show_answers_immediately: true,
+    trial_questions_count: 10,
+    max_attempts: 2,
+    max_trial_attempts: 1,
+    is_active: true
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    
+    if (!formData.title.trim()) {
+      setError('Test nomi kiritilishi shart')
+      return
+    }
+
+    try {
+      setSaving(true)
+      setError('')
+      const token = localStorage.getItem('access_token')
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+
+      const response = await axios.post(
+        `${apiBaseUrl}/tests/`,
+        {
+          ...formData,
+          position_ids: formData.position_ids.length > 0 ? formData.position_ids : null
+        },
+        { headers }
+      )
+
+      if (response.data.id) {
+        alert('Test muvaffaqiyatli yaratildi!')
+        onSuccess()
+      }
+    } catch (err) {
+      console.error('Error creating test:', err)
+      setError(err.response?.data?.error || err.response?.data?.detail || 'Test yaratishda xatolik yuz berdi')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handlePositionChange = (positionId) => {
+    const id = Number(positionId)
+    setFormData(prev => ({
+      ...prev,
+      position_ids: prev.position_ids.includes(id)
+        ? prev.position_ids.filter(p => p !== id)
+        : [...prev.position_ids, id]
+    }))
+  }
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 1000
+    }}>
+      <div style={{
+        background: 'white',
+        padding: '30px',
+        borderRadius: '12px',
+        maxWidth: '700px',
+        width: '90%',
+        maxHeight: '90vh',
+        overflow: 'auto'
+      }}>
+        <h3 style={{ marginTop: 0 }}>Yangi test qo'shish</h3>
+        
+        {error && (
+          <div className="error" style={{ marginBottom: '20px' }}>{error}</div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+              Test nomi *:
+            </label>
+            <input
+              type="text"
+              className="input"
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              required
+              style={{ width: '100%', margin: 0 }}
+            />
+          </div>
+
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+              Tavsif:
+            </label>
+            <textarea
+              className="input"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              rows={3}
+              style={{ width: '100%', margin: 0, resize: 'vertical' }}
+            />
+          </div>
+
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+              Lavozimlar:
+            </label>
+            <div style={{ 
+              border: '1px solid #ddd', 
+              borderRadius: '6px', 
+              padding: '10px', 
+              maxHeight: '150px', 
+              overflow: 'auto',
+              background: '#f9f9f9'
+            }}>
+              {positions.length === 0 ? (
+                <div style={{ color: '#999', fontStyle: 'italic' }}>Lavozimlar topilmadi</div>
+              ) : (
+                positions.map(pos => (
+                  <label key={pos.id} style={{ display: 'block', marginBottom: '8px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={formData.position_ids.includes(pos.id)}
+                      onChange={() => handlePositionChange(pos.id)}
+                      style={{ marginRight: '8px' }}
+                    />
+                    {pos.name}
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px', marginBottom: '15px' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+                Vaqt chegarasi (daqiqa):
+              </label>
+              <input
+                type="number"
+                className="input"
+                value={formData.time_limit}
+                onChange={(e) => setFormData({ ...formData, time_limit: Number(e.target.value) })}
+                min="1"
+                required
+                style={{ width: '100%', margin: 0 }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+                O'tish balli (%):
+              </label>
+              <input
+                type="number"
+                className="input"
+                value={formData.passing_score}
+                onChange={(e) => setFormData({ ...formData, passing_score: Number(e.target.value) })}
+                min="0"
+                max="100"
+                required
+                style={{ width: '100%', margin: 0 }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+                Max urinishlar:
+              </label>
+              <input
+                type="number"
+                className="input"
+                value={formData.max_attempts}
+                onChange={(e) => setFormData({ ...formData, max_attempts: Number(e.target.value) })}
+                min="1"
+                required
+                style={{ width: '100%', margin: 0 }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+                Max trial urinishlar:
+              </label>
+              <input
+                type="number"
+                className="input"
+                value={formData.max_trial_attempts}
+                onChange={(e) => setFormData({ ...formData, max_trial_attempts: Number(e.target.value) })}
+                min="1"
+                required
+                style={{ width: '100%', margin: 0 }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+                Random savollar soni (0 = barcha):
+              </label>
+              <input
+                type="number"
+                className="input"
+                value={formData.random_questions_count}
+                onChange={(e) => setFormData({ ...formData, random_questions_count: Number(e.target.value) })}
+                min="0"
+                required
+                style={{ width: '100%', margin: 0 }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+                Trial savollar soni:
+              </label>
+              <input
+                type="number"
+                className="input"
+                value={formData.trial_questions_count}
+                onChange={(e) => setFormData({ ...formData, trial_questions_count: Number(e.target.value) })}
+                min="1"
+                required
+                style={{ width: '100%', margin: 0 }}
+              />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+              Test rejimi:
+            </label>
+            <select
+              className="input"
+              value={formData.test_mode}
+              onChange={(e) => setFormData({ ...formData, test_mode: e.target.value })}
+              style={{ width: '100%', margin: 0 }}
+            >
+              <option value="both">Ikkalasi (WebApp va Telegram)</option>
+              <option value="webapp">WebApp</option>
+              <option value="telegram">Telegram</option>
+            </select>
+          </div>
+
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={formData.show_answers_immediately}
+                onChange={(e) => setFormData({ ...formData, show_answers_immediately: e.target.checked })}
+              />
+              <span>Har bir savoldan keyin javob ko'rsatilsin</span>
+            </label>
+          </div>
+
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={formData.is_active}
+                onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+              />
+              <span>Test faol</span>
+            </label>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={onClose}
+              style={{ background: '#6c757d' }}
+              disabled={saving}
+            >
+              Bekor qilish
+            </button>
+            <button
+              type="submit"
+              className="btn"
+              disabled={saving}
+              style={{ background: '#28a745' }}
+            >
+              {saving ? 'Yaratilmoqda...' : 'Yaratish'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }

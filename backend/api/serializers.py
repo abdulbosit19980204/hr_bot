@@ -51,20 +51,58 @@ class TestSerializer(serializers.ModelSerializer):
     questions = QuestionSerializer(many=True, read_only=True)
     questions_count = serializers.IntegerField(source='questions.count', read_only=True)
     positions = PositionSerializer(many=True, read_only=True)
+    position_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text="List of position IDs"
+    )
 
     class Meta:
         model = Test
-        fields = ['id', 'title', 'description', 'positions', 'time_limit', 'passing_score', 
+        fields = ['id', 'title', 'description', 'positions', 'position_ids', 'time_limit', 'passing_score', 
                   'test_mode', 'random_questions_count', 'show_answers_immediately',
-                  'trial_questions_count', 'is_active', 'questions', 'questions_count', 
-                  'created_at', 'updated_at']
+                  'trial_questions_count', 'max_attempts', 'max_trial_attempts', 'is_active', 
+                  'questions', 'questions_count', 'created_at', 'updated_at']
         read_only_fields = ['created_at', 'updated_at']
+    
+    def create(self, validated_data):
+        """Create test with positions"""
+        position_ids = validated_data.pop('position_ids', None)
+        test = Test.objects.create(**validated_data)
+        
+        if position_ids:
+            from users.models import Position
+            positions = Position.objects.filter(id__in=position_ids, is_open=True)
+            test.positions.set(positions)
+        
+        return test
+    
+    def update(self, instance, validated_data):
+        """Update test with positions"""
+        position_ids = validated_data.pop('position_ids', None)
+        
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        if position_ids is not None:
+            from users.models import Position
+            positions = Position.objects.filter(id__in=position_ids, is_open=True)
+            instance.positions.set(positions)
+        
+        return instance
     
     def to_representation(self, instance):
         """Random questions tanlash va test mode'ga qarab filter qilish"""
         import random
         data = super().to_representation(instance)
         questions = data.get('questions', [])
+        
+        # Don't randomize for admin views
+        if self.context.get('admin_view', False):
+            return data
         
         # Random questions count
         random_count = instance.random_questions_count

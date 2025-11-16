@@ -55,6 +55,42 @@ class TestViewSet(viewsets.ModelViewSet):
         if self.action == 'list':
             return TestListSerializer
         return TestSerializer
+    
+    def get_permissions(self):
+        """
+        AllowAny for list/retrieve, IsAuthenticated + is_superuser for create/update/delete
+        """
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            from rest_framework.permissions import IsAuthenticated
+            return [IsAuthenticated()]
+        return [AllowAny()]
+    
+    def create(self, request, *args, **kwargs):
+        """Create test - only for superusers"""
+        if not request.user.is_authenticated or not request.user.is_superuser:
+            return Response(
+                {'error': 'Permission denied. Superuser access required.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().create(request, *args, **kwargs)
+    
+    def update(self, request, *args, **kwargs):
+        """Update test - only for superusers"""
+        if not request.user.is_authenticated or not request.user.is_superuser:
+            return Response(
+                {'error': 'Permission denied. Superuser access required.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().update(request, *args, **kwargs)
+    
+    def destroy(self, request, *args, **kwargs):
+        """Delete test - only for superusers"""
+        if not request.user.is_authenticated or not request.user.is_superuser:
+            return Response(
+                {'error': 'Permission denied. Superuser access required.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().destroy(request, *args, **kwargs)
 
     def get_queryset(self):
         queryset = super().get_queryset()
