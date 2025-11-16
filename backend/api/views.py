@@ -176,6 +176,64 @@ class TestViewSet(viewsets.ModelViewSet):
         serializer = QuestionSerializer(paginated_questions, many=True, context={'admin_view': True, 'request': request})
         return paginator.get_paginated_response(serializer.data)
     
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def import_questions(self, request, pk=None):
+        """Import questions from JSON file - only for superusers"""
+        if not request.user.is_authenticated or not request.user.is_superuser:
+            return Response(
+                {'error': 'Permission denied. Superuser access required.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        test = self.get_object()
+        
+        try:
+            questions_data = request.data.get('questions', [])
+            if not questions_data:
+                return Response(
+                    {'error': 'Questions data is required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            imported_count = 0
+            errors = []
+            
+            for idx, q_data in enumerate(questions_data):
+                try:
+                    # Create question
+                    question = Question.objects.create(
+                        test=test,
+                        text=q_data.get('text', ''),
+                        order=q_data.get('order', idx)
+                    )
+                    
+                    # Create answer options
+                    options_data = q_data.get('options', [])
+                    for opt_idx, opt_data in enumerate(options_data):
+                        AnswerOption.objects.create(
+                            question=question,
+                            text=opt_data.get('text', ''),
+                            is_correct=opt_data.get('is_correct', False),
+                            order=opt_data.get('order', opt_idx)
+                        )
+                    
+                    imported_count += 1
+                except Exception as e:
+                    errors.append(f"Question {idx + 1}: {str(e)}")
+            
+            return Response({
+                'success': True,
+                'imported_count': imported_count,
+                'total_count': len(questions_data),
+                'errors': errors if errors else None
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Import failed: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
     @action(detail=True, methods=['get'])
     def questions(self, request, pk=None):
         """Get test questions (random if configured)"""

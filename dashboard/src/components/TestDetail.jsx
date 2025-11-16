@@ -158,6 +158,65 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
     }
   }
 
+  const handleImportQuestions = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    
+    try {
+      const text = await file.text()
+      const importData = JSON.parse(text)
+      
+      // Validate import data
+      if (!importData.questions || !Array.isArray(importData.questions)) {
+        alert('Noto\'g\'ri JSON format. "questions" array bo\'lishi kerak.')
+        e.target.value = '' // Reset file input
+        return
+      }
+      
+      // Confirm import
+      const confirmMsg = `${importData.questions.length} ta savol import qilishni tasdiqlaysizmi?`
+      if (!window.confirm(confirmMsg)) {
+        e.target.value = '' // Reset file input
+        return
+      }
+      
+      const token = localStorage.getItem('access_token')
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+      
+      // Send to backend
+      const response = await axios.post(
+        `${apiBaseUrl}/tests/${test.id}/import_questions/`,
+        { questions: importData.questions },
+        { headers }
+      )
+      
+      if (response.data.success) {
+        const msg = `Muvaffaqiyatli import qilindi: ${response.data.imported_count} / ${response.data.total_count} ta savol`
+        if (response.data.errors && response.data.errors.length > 0) {
+          alert(`${msg}\n\nXatoliklar:\n${response.data.errors.join('\n')}`)
+        } else {
+          alert(msg)
+        }
+        
+        // Reload questions
+        if (showQuestions) {
+          loadQuestions()
+        }
+        // Reload test data to update questions count
+        loadTestData()
+      }
+      
+      e.target.value = '' // Reset file input
+    } catch (err) {
+      console.error('Error importing questions:', err)
+      alert(err.response?.data?.error || 'Savollarni import qilishda xatolik yuz berdi')
+      e.target.value = '' // Reset file input
+    }
+  }
+
   const loadTestData = async () => {
     try {
       setLoading(true)
@@ -354,6 +413,15 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
                   >
                     ⬇
                   </span>
+                  <label style={{ fontSize: '18px', cursor: 'pointer', userSelect: 'none', color: '#229ED9' }} title="Import qilish (JSON)">
+                    <input
+                      type="file"
+                      accept=".json"
+                      style={{ display: 'none' }}
+                      onChange={handleImportQuestions}
+                    />
+                    ⬆
+                  </label>
                 </>
               )}
               <button 
