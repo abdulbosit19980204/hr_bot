@@ -14,6 +14,12 @@ function ResultsTable({ apiBaseUrl }) {
   const [orderBy, setOrderBy] = useState('-completed_at')
   const [tests, setTests] = useState([])
   const [users, setUsers] = useState([])
+  const [selectedCandidates, setSelectedCandidates] = useState(new Set())
+  const [showNotificationModal, setShowNotificationModal] = useState(false)
+  const [notificationTitle, setNotificationTitle] = useState('')
+  const [notificationMessage, setNotificationMessage] = useState('')
+  const [notificationType, setNotificationType] = useState('interview')
+  const [sendingNotification, setSendingNotification] = useState(false)
 
   useEffect(() => {
     loadTests()
@@ -113,9 +119,100 @@ function ResultsTable({ apiBaseUrl }) {
     ? results.filter(result => {
         if (statusFilter === 'passed') return result.is_passed
         if (statusFilter === 'failed') return !result.is_passed
+        if (statusFilter === 'best') {
+          // Eng yaxshi nomzodlar: o'tganlar va balli 80% dan yuqori
+          return result.is_passed && result.score >= 80
+        }
         return true
+      }).sort((a, b) => {
+        // Eng yaxshi nomzodlar uchun ball bo'yicha tartiblash (yuqoridan pastga)
+        if (statusFilter === 'best') {
+          return b.score - a.score
+        }
+        return 0
       })
     : results
+
+  const handleSelectCandidate = (resultId) => {
+    const newSelected = new Set(selectedCandidates)
+    if (newSelected.has(resultId)) {
+      newSelected.delete(resultId)
+    } else {
+      newSelected.add(resultId)
+    }
+    setSelectedCandidates(newSelected)
+  }
+
+  const handleSelectAll = () => {
+    if (selectedCandidates.size === filteredResults.length) {
+      setSelectedCandidates(new Set())
+    } else {
+      setSelectedCandidates(new Set(filteredResults.map(r => r.id)))
+    }
+  }
+
+  const handleSendNotification = async () => {
+    if (selectedCandidates.size === 0) {
+      alert('Iltimos, kamida bitta nomzodni tanlang')
+      return
+    }
+
+    if (!notificationTitle || !notificationMessage) {
+      alert('Iltimos, sarlavha va xabar matnini kiriting')
+      return
+    }
+
+    try {
+      setSendingNotification(true)
+      const token = localStorage.getItem('access_token')
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+
+      // Get unique user IDs from selected results
+      const selectedResults = filteredResults.filter(r => selectedCandidates.has(r.id))
+      const userIds = [...new Set(selectedResults.map(r => r.user?.id).filter(Boolean))]
+
+      if (userIds.length === 0) {
+        alert('Tanlangan natijalarda foydalanuvchi topilmadi')
+        setSendingNotification(false)
+        return
+      }
+
+      const response = await axios.post(
+        `${apiBaseUrl}/notifications/send/`,
+        {
+          user_ids: userIds,
+          title: notificationTitle,
+          message: notificationMessage,
+          notification_type: notificationType
+        },
+        { headers }
+      )
+
+      if (response.data.success) {
+        alert(
+          `✅ Xabar muvaffaqiyatli yuborildi!\n` +
+          `📊 Jami: ${response.data.total}\n` +
+          `✅ Muvaffaqiyatli: ${response.data.successful}\n` +
+          `❌ Xatolik: ${response.data.failed}`
+        )
+        setShowNotificationModal(false)
+        setSelectedCandidates(new Set())
+        setNotificationTitle('')
+        setNotificationMessage('')
+        setNotificationType('interview')
+      }
+    } catch (err) {
+      console.error('Error sending notification:', err)
+      alert(
+        `❌ Xatolik: ${err.response?.data?.error || err.message || 'Xabar yuborishda xatolik yuz berdi'}`
+      )
+    } finally {
+      setSendingNotification(false)
+    }
+  }
 
   if (loading && results.length === 0) {
     return <div className="loading">Yuklanmoqda...</div>
@@ -124,8 +221,30 @@ function ResultsTable({ apiBaseUrl }) {
   return (
     <div className="table-card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-        <h3 style={{ margin: 0 }}>Barcha natijalar</h3>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <h3 style={{ margin: 0 }}>Barcha natijalar</h3>
+          {selectedCandidates.size > 0 && (
+            <span style={{ 
+              background: '#229ED9', 
+              color: 'white', 
+              padding: '4px 12px', 
+              borderRadius: '12px',
+              fontSize: '14px'
+            }}>
+              {selectedCandidates.size} ta tanlangan
+            </span>
+          )}
+        </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {selectedCandidates.size > 0 && (
+            <button
+              className="btn"
+              onClick={() => setShowNotificationModal(true)}
+              style={{ margin: 0, background: '#28a745' }}
+            >
+              📨 Notification yuborish ({selectedCandidates.size})
+            </button>
+          )}
           <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px' }}>
             <input
               type="text"
@@ -172,11 +291,12 @@ function ResultsTable({ apiBaseUrl }) {
                 setStatusFilter(e.target.value)
                 handleFilterChange()
               }}
-              style={{ width: '150px', margin: 0 }}
+              style={{ width: '180px', margin: 0 }}
             >
               <option value="">Barcha statuslar</option>
               <option value="passed">O'tganlar</option>
               <option value="failed">O'tmaganlar</option>
+              <option value="best">Eng yaxshi nomzodlar</option>
             </select>
             <select
               className="input"
@@ -222,6 +342,14 @@ function ResultsTable({ apiBaseUrl }) {
           <table>
             <thead>
               <tr>
+                <th>
+                  <input
+                    type="checkbox"
+                    checked={selectedCandidates.size === filteredResults.length && filteredResults.length > 0}
+                    onChange={handleSelectAll}
+                    style={{ cursor: 'pointer' }}
+                  />
+                </th>
                 <th>Foydalanuvchi</th>
                 <th>Email</th>
                 <th>Telefon</th>
@@ -235,7 +363,15 @@ function ResultsTable({ apiBaseUrl }) {
             </thead>
             <tbody>
               {filteredResults.map((result) => (
-                <tr key={result.id}>
+                <tr key={result.id} style={{ background: selectedCandidates.has(result.id) ? '#e7f3ff' : '' }}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedCandidates.has(result.id)}
+                      onChange={() => handleSelectCandidate(result.id)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  </td>
                   <td>{result.user?.first_name} {result.user?.last_name}</td>
                   <td>{result.user?.email || '-'}</td>
                   <td>{result.user?.phone || '-'}</td>
@@ -278,6 +414,106 @@ function ResultsTable({ apiBaseUrl }) {
             </div>
           )}
         </>
+      )}
+
+      {/* Notification Modal */}
+      {showNotificationModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            maxWidth: '600px',
+            width: '90%',
+            maxHeight: '90vh',
+            overflow: 'auto'
+          }}>
+            <h3 style={{ marginTop: 0 }}>Notification yuborish</h3>
+            <p style={{ color: '#666', marginBottom: '20px' }}>
+              {selectedCandidates.size} ta nomzodga xabar yuboriladi
+            </p>
+
+            <div style={{ marginBottom: '15px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+                Notification turi:
+              </label>
+              <select
+                className="input"
+                value={notificationType}
+                onChange={(e) => setNotificationType(e.target.value)}
+                style={{ width: '100%', margin: 0 }}
+              >
+                <option value="interview">Suxbat taklifi</option>
+                <option value="job_offer">Ishga taklif</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '15px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+                Sarlavha:
+              </label>
+              <input
+                type="text"
+                className="input"
+                value={notificationTitle}
+                onChange={(e) => setNotificationTitle(e.target.value)}
+                placeholder={notificationType === 'interview' ? 'Suxbat taklifi' : 'Ishga taklif'}
+                style={{ width: '100%', margin: 0 }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+                Xabar matni:
+              </label>
+              <textarea
+                className="input"
+                value={notificationMessage}
+                onChange={(e) => setNotificationMessage(e.target.value)}
+                placeholder="Xabar matnini kiriting..."
+                rows={6}
+                style={{ width: '100%', margin: 0, resize: 'vertical' }}
+              />
+              <small style={{ color: '#666' }}>
+              HTML formatida yozish mumkin: &lt;b&gt;qalin&lt;/b&gt;, &lt;i&gt;kursiv&lt;/i&gt;, &lt;br&gt; yangi qator
+              </small>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                className="btn"
+                onClick={() => {
+                  setShowNotificationModal(false)
+                  setNotificationTitle('')
+                  setNotificationMessage('')
+                }}
+                style={{ background: '#6c757d' }}
+                disabled={sendingNotification}
+              >
+                Bekor qilish
+              </button>
+              <button
+                className="btn"
+                onClick={handleSendNotification}
+                disabled={sendingNotification || !notificationTitle || !notificationMessage}
+                style={{ background: '#28a745' }}
+              >
+                {sendingNotification ? 'Yuborilmoqda...' : 'Yuborish'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

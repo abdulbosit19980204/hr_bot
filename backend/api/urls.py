@@ -3,7 +3,8 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import (
     TestViewSet, QuestionViewSet, UserViewSet,
-    CVViewSet, TestResultViewSet, StatisticsView, PositionViewSet
+    CVViewSet, TestResultViewSet, StatisticsView, PositionViewSet,
+    NotificationView
 )
 
 router = DefaultRouter()
@@ -19,5 +20,6 @@ urlpatterns = [
     path('auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('statistics/', StatisticsView.as_view(), name='statistics'),
+    path('notifications/send/', NotificationView.as_view(), name='send_notification'),
 ]
 

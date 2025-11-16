@@ -14,10 +14,12 @@ from django.utils import timezone
 from datetime import timedelta
 import random
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
-from users.models import CV, Position, TelegramProfile
+from users.models import CV, Position, TelegramProfile, Notification
+from users.services import send_telegram_message_async, send_notification_to_users
 from tests.models import Test, Question, AnswerOption, TestResult
 from .serializers import (
     TestSerializer, TestListSerializer, QuestionSerializer,
@@ -889,3 +891,93 @@ class StatisticsView(APIView):
             'recent_results': recent_results_data,
         })
 
+
+class NotificationView(APIView):
+    """Send notification to selected users"""
+    permission_classes = [IsAuthenticated]  # Faqat authenticated userlar
+    
+    def post(self, request):
+        """
+        Send notification to selected users
+        Expected data:
+        {
+            "user_ids": [1, 2, 3],
+            "title": "Suxbat taklifi",
+            "message": "Sizni suxbatga taklif qilamiz...",
+            "notification_type": "interview" or "job_offer"
+        }
+        """
+        user_ids = request.data.get('user_ids', [])
+        title = request.data.get('title', '')
+        message = request.data.get('message', '')
+        notification_type = request.data.get('notification_type', 'interview')  # 'interview' or 'job_offer'
+        
+        if not user_ids:
+            return Response(
+                {'error': 'user_ids is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not title or not message:
+            return Response(
+                {'error': 'title and message are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Get users
+            users = User.objects.filter(id__in=user_ids, telegram_id__isnull=False)
+            if not users.exists():
+                return Response(
+                    {'error': 'No users found with telegram_id'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Format message based on notification type
+            formatted_message = message
+            if notification_type == 'interview':
+                # Suxbat taklifi uchun format
+                formatted_message = f"🎯 <b>Suxbat taklifi</b>\n\n{message}"
+            elif notification_type == 'job_offer':
+                # Ishga taklif uchun format
+                formatted_message = f"💼 <b>Ishga taklif</b>\n\n{message}"
+            
+            # Create notification
+            notification = Notification.objects.create(
+                title=title,
+                message=formatted_message,
+                send_to_all=False,
+                created_by=request.user if request.user.is_authenticated else None
+            )
+            
+            # Add recipients
+            notification.recipients.set(users)
+            
+            # Send notifications
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(send_notification_to_users(notification))
+            loop.close()
+            
+            # Update notification stats
+            notification.sent_at = timezone.now()
+            notification.total_recipients = result['total']
+            notification.successful_sends = result['successful']
+            notification.failed_sends = result['failed']
+            notification.save()
+            
+            return Response({
+                'success': True,
+                'message': 'Notification sent successfully',
+                'total': result['total'],
+                'successful': result['successful'],
+                'failed': result['failed'],
+                'notification_id': notification.id
+            })
+            
+        except Exception as e:
+            logger.error(f"Error sending notification: {e}", exc_info=True)
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
