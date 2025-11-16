@@ -93,6 +93,88 @@ function UsersList({ apiBaseUrl }) {
     setSelectedUser(null)
   }
 
+  const handleExportExcel = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        alert('Export qilish uchun tizimga kirish kerak')
+        return
+      }
+      
+      const params = {
+        search: searchTerm || undefined,
+        position: selectedPosition || undefined
+      }
+      Object.keys(params).forEach(key => params[key] === undefined && delete params[key])
+      
+      const response = await axios.get(`${apiBaseUrl}/users/export_excel/`, {
+        params,
+        headers: { 'Authorization': `Bearer ${token}` },
+        responseType: 'blob'
+      })
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      const contentDisposition = response.headers['content-disposition']
+      let filename = `users_${new Date().toISOString().split('T')[0]}.xlsx`
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i)
+        if (filenameMatch) filename = filenameMatch[1]
+      }
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      alert('Foydalanuvchilar muvaffaqiyatli Excel formatida export qilindi!')
+    } catch (err) {
+      console.error('Error exporting users:', err)
+      alert(err.response?.data?.error || 'Foydalanuvchilarni export qilishda xatolik yuz berdi')
+    }
+  }
+
+  const handleExportCSV = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        alert('Export qilish uchun tizimga kirish kerak')
+        return
+      }
+      
+      const params = {
+        search: searchTerm || undefined,
+        position: selectedPosition || undefined
+      }
+      Object.keys(params).forEach(key => params[key] === undefined && delete params[key])
+      
+      const response = await axios.get(`${apiBaseUrl}/users/export_csv/`, {
+        params,
+        headers: { 'Authorization': `Bearer ${token}` },
+        responseType: 'blob'
+      })
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      const contentDisposition = response.headers['content-disposition']
+      let filename = `users_${new Date().toISOString().split('T')[0]}.csv`
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i)
+        if (filenameMatch) filename = filenameMatch[1]
+      }
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      alert('Foydalanuvchilar muvaffaqiyatli CSV formatida export qilindi!')
+    } catch (err) {
+      console.error('Error exporting users:', err)
+      alert(err.response?.data?.error || 'Foydalanuvchilarni export qilishda xatolik yuz berdi')
+    }
+  }
+
   const handleSelectUser = (userId) => {
     const newSelected = new Set(selectedUsers)
     if (newSelected.has(userId)) {
@@ -240,6 +322,22 @@ function UsersList({ apiBaseUrl }) {
               📨 Notification yuborish ({selectedUsers.size})
             </button>
           )}
+          <button
+            className="btn"
+            onClick={handleExportExcel}
+            style={{ margin: 0, background: '#229ED9' }}
+            title="Excel formatida export qilish"
+          >
+            ⬇ Excel
+          </button>
+          <button
+            className="btn"
+            onClick={handleExportCSV}
+            style={{ margin: 0, background: '#6c757d' }}
+            title="CSV formatida export qilish"
+          >
+            ⬇ CSV
+          </button>
           <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px' }}>
             <input
               type="text"

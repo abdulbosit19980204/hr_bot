@@ -157,6 +157,90 @@ function TestsList({ apiBaseUrl }) {
     setSelectedTest(null)
   }
 
+  const handleExportExcel = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        alert('Export qilish uchun tizimga kirish kerak')
+        return
+      }
+      
+      const params = {
+        search: searchTerm || undefined,
+        positions: selectedPosition || undefined,
+        is_active: statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined
+      }
+      Object.keys(params).forEach(key => params[key] === undefined && delete params[key])
+      
+      const response = await axios.get(`${apiBaseUrl}/tests/export_excel/`, {
+        params,
+        headers: { 'Authorization': `Bearer ${token}` },
+        responseType: 'blob'
+      })
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      const contentDisposition = response.headers['content-disposition']
+      let filename = `tests_${new Date().toISOString().split('T')[0]}.xlsx`
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i)
+        if (filenameMatch) filename = filenameMatch[1]
+      }
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      alert('Testlar muvaffaqiyatli Excel formatida export qilindi!')
+    } catch (err) {
+      console.error('Error exporting tests:', err)
+      alert(err.response?.data?.error || 'Testlarni export qilishda xatolik yuz berdi')
+    }
+  }
+
+  const handleExportCSV = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        alert('Export qilish uchun tizimga kirish kerak')
+        return
+      }
+      
+      const params = {
+        search: searchTerm || undefined,
+        positions: selectedPosition || undefined,
+        is_active: statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined
+      }
+      Object.keys(params).forEach(key => params[key] === undefined && delete params[key])
+      
+      const response = await axios.get(`${apiBaseUrl}/tests/export_csv/`, {
+        params,
+        headers: { 'Authorization': `Bearer ${token}` },
+        responseType: 'blob'
+      })
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      const contentDisposition = response.headers['content-disposition']
+      let filename = `tests_${new Date().toISOString().split('T')[0]}.csv`
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i)
+        if (filenameMatch) filename = filenameMatch[1]
+      }
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      alert('Testlar muvaffaqiyatli CSV formatida export qilindi!')
+    } catch (err) {
+      console.error('Error exporting tests:', err)
+      alert(err.response?.data?.error || 'Testlarni export qilishda xatolik yuz berdi')
+    }
+  }
+
   const handleDeleteTest = async (testId) => {
     try {
       const token = localStorage.getItem('access_token')
@@ -256,6 +340,22 @@ function TestsList({ apiBaseUrl }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <h3 style={{ margin: 0 }}>Testlar</h3>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn"
+            onClick={handleExportExcel}
+            style={{ margin: 0, background: '#229ED9' }}
+            title="Excel formatida export qilish"
+          >
+            ⬇ Excel
+          </button>
+          <button
+            className="btn"
+            onClick={handleExportCSV}
+            style={{ margin: 0, background: '#6c757d' }}
+            title="CSV formatida export qilish"
+          >
+            ⬇ CSV
+          </button>
           {isSuperuser && (
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
               <button

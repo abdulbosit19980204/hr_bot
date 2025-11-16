@@ -878,10 +878,331 @@ class TestViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_404_NOT_FOUND
                 )
         
-        return Response(
-            {'error': 'telegram_id required'},
-            status=status.HTTP_400_BAD_REQUEST
+            return Response(
+                {'error': 'telegram_id required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def export_excel(self, request):
+        """Export tests to Excel - only for authenticated users"""
+        from django.http import HttpResponse
+        from openpyxl import Workbook
+        from django.utils import timezone
+        
+        # Get filtered queryset
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
+        filename = f"tests_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Tests"
+        
+        headers = ['ID', 'Test nomi', 'Tavsif', 'Lavozimlar', 'Savollar soni', 'Vaqt chegarasi (daqiqa)', 
+                  'O\'tish balli (%)', 'Max urinishlar', 'Test rejimi', 'Status', 'Yaratilgan sana']
+        ws.append(headers)
+        
+        for test in queryset:
+            positions = ', '.join([p.name for p in test.positions.all()]) if test.positions.exists() else ''
+            test_mode = {
+                'telegram': 'Telegram',
+                'web': 'Web',
+                'both': 'Ikkalasi'
+            }.get(test.test_mode, test.test_mode)
+            
+            row = [
+                test.id,
+                test.title or '',
+                test.description or '',
+                positions,
+                test.questions.count() if hasattr(test, 'questions') else 0,
+                test.time_limit or 0,
+                test.passing_score or 0,
+                test.max_attempts or 0,
+                test_mode,
+                'Aktiv' if test.is_active else 'Nofaol',
+                test.created_at.strftime('%Y-%m-%d %H:%M:%S') if test.created_at else ''
+            ]
+            ws.append(row)
+        
+        wb.save(response)
+        return response
+    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def export_csv(self, request):
+        """Export tests to CSV - only for authenticated users"""
+        import csv
+        from django.http import HttpResponse
+        from django.utils import timezone
+        
+        # Get filtered queryset
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        filename = f"tests_{timezone.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response.write('\ufeff')  # BOM for UTF-8
+        
+        writer = csv.writer(response)
+        writer.writerow(['ID', 'Test nomi', 'Tavsif', 'Lavozimlar', 'Savollar soni', 'Vaqt chegarasi (daqiqa)', 
+                        'O\'tish balli (%)', 'Max urinishlar', 'Test rejimi', 'Status', 'Yaratilgan sana'])
+        
+        for test in queryset:
+            positions = ', '.join([p.name for p in test.positions.all()]) if test.positions.exists() else ''
+            test_mode = {
+                'telegram': 'Telegram',
+                'web': 'Web',
+                'both': 'Ikkalasi'
+            }.get(test.test_mode, test.test_mode)
+            
+            writer.writerow([
+                test.id,
+                test.title or '',
+                test.description or '',
+                positions,
+                test.questions.count() if hasattr(test, 'questions') else 0,
+                test.time_limit or 0,
+                test.passing_score or 0,
+                test.max_attempts or 0,
+                test_mode,
+                'Aktiv' if test.is_active else 'Nofaol',
+                test.created_at.strftime('%Y-%m-%d %H:%M:%S') if test.created_at else ''
+            ])
+        
+        return response
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all()
+    permission_classes = [AllowAny]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['position']
+    search_fields = ['username', 'first_name', 'last_name', 'email', 'phone']
+    ordering_fields = ['created_at']
+    ordering = ['-created_at']
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return UserCreateSerializer
+        return UserSerializer
+
+    @action(detail=False, methods=['post'])
+    def telegram_auth(self, request):
+        """Authenticate user by Telegram ID and update Telegram info"""
+        telegram_id = request.data.get('telegram_id')
+        if not telegram_id:
+            return Response({'error': 'telegram_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(telegram_id=telegram_id)
+            # Update TelegramProfile, not User's first_name/last_name
+            try:
+                telegram_profile = TelegramProfile.objects.get(telegram_id=telegram_id)
+                # Update existing profile
+                telegram_profile.user = user
+            except TelegramProfile.DoesNotExist:
+                # Create new profile
+                telegram_profile = TelegramProfile.objects.create(
+                    user=user,
+                    telegram_id=telegram_id,
+                    telegram_is_premium=False,
+                    telegram_is_bot=False
+                )
+            
+            # Update TelegramProfile info if provided
+            if 'telegram_username' in request.data:
+                telegram_profile.telegram_username = request.data.get('telegram_username')
+            if 'telegram_language_code' in request.data:
+                telegram_profile.telegram_language_code = request.data.get('telegram_language_code')
+            
+            # Always ensure telegram_is_premium is set (NOT NULL constraint)
+            # Set it explicitly to avoid None values
+            if 'telegram_is_premium' in request.data:
+                telegram_profile.telegram_is_premium = bool(request.data.get('telegram_is_premium', False))
+            else:
+                # If not provided, ensure it's set to False (not None)
+                telegram_profile.telegram_is_premium = False if telegram_profile.telegram_is_premium is None else bool(telegram_profile.telegram_is_premium)
+            
+            # Always ensure telegram_is_bot is set (NOT NULL constraint)
+            telegram_profile.telegram_is_bot = False if telegram_profile.telegram_is_bot is None else bool(telegram_profile.telegram_is_bot)
+            
+            # Update telegram first_name and last_name (NOT User's first_name/last_name)
+            if 'first_name' in request.data:
+                telegram_first_name = request.data.get('first_name', '')
+                telegram_profile.telegram_first_name = telegram_first_name if telegram_first_name is not None else ''
+            if 'last_name' in request.data:
+                telegram_last_name = request.data.get('last_name', '')
+                telegram_profile.telegram_last_name = telegram_last_name if telegram_last_name is not None else ''
+            
+            # Update user's telegram_id if not set
+            if not user.telegram_id:
+                user.telegram_id = telegram_id
+                user.save()
+            
+            telegram_profile.save()
+            
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+                'user': UserSerializer(user).data
+            })
+        except User.DoesNotExist:
+            # Create user if not exists (without telegram first_name/last_name)
+            user = User.objects.create_user(
+                username=f'user_{telegram_id}',
+                telegram_id=telegram_id,
+                # Don't set first_name/last_name from telegram - user will fill it during registration
+                first_name='',
+                last_name=''
+            )
+            
+            # Create TelegramProfile with telegram info
+            telegram_first_name = request.data.get('first_name', '') or ''
+            telegram_last_name = request.data.get('last_name', '') or ''
+            if telegram_first_name is None:
+                telegram_first_name = ''
+            if telegram_last_name is None:
+                telegram_last_name = ''
+            
+            telegram_profile = TelegramProfile.objects.create(
+                user=user,
+                telegram_id=telegram_id,
+                telegram_first_name=telegram_first_name,
+                telegram_last_name=telegram_last_name,
+                telegram_username=request.data.get('telegram_username'),
+                telegram_language_code=request.data.get('telegram_language_code'),
+                telegram_is_premium=request.data.get('telegram_is_premium', False),
+                telegram_is_bot=False
+            )
+            
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+                'user': UserSerializer(user).data
+            }, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'])
+    def create_telegram_user(self, request):
+        """Create user from Telegram data"""
+        telegram_id = request.data.get('telegram_id')
+        if telegram_id:
+            try:
+                user = User.objects.get(telegram_id=telegram_id)
+                # Update user data
+                for key in ['first_name', 'last_name', 'email', 'phone']:
+                    if key in request.data:
+                        setattr(user, key, request.data[key])
+                user.save()
+                return Response(UserSerializer(user).data)
+            except User.DoesNotExist:
+                user = User.objects.create_user(
+                    username=f'user_{telegram_id}',
+                    telegram_id=telegram_id,
+                    first_name=request.data.get('first_name', ''),
+                    last_name=request.data.get('last_name', ''),
+                    email=request.data.get('email', ''),
+                    phone=request.data.get('phone', '')
+                )
+                return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+        return Response({'error': 'telegram_id required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def export_excel(self, request):
+        """Export users to Excel - only for authenticated users"""
+        from django.http import HttpResponse
+        from openpyxl import Workbook
+        from django.utils import timezone
+        
+        # Get filtered queryset
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # If not staff, only allow export of own data
+        if not request.user.is_staff:
+            queryset = queryset.filter(id=request.user.id)
+        
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        filename = f"users_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Users"
+        
+        headers = ['ID', 'Username', 'Ism', 'Familiya', 'Email', 'Telefon', 'Telegram ID', 'Lavozim', 'Status', 'Yaratilgan sana']
+        ws.append(headers)
+        
+        for user in queryset:
+            position_name = ''
+            if user.position:
+                position_name = str(user.position.name) if hasattr(user.position, 'name') else str(user.position)
+            
+            row = [
+                user.id,
+                user.username or '',
+                user.first_name or '',
+                user.last_name or '',
+                user.email or '',
+                user.phone or '',
+                user.telegram_id or '',
+                position_name,
+                'Aktiv' if user.is_active else 'Nofaol',
+                user.date_joined.strftime('%Y-%m-%d %H:%M:%S') if user.date_joined else ''
+            ]
+            ws.append(row)
+        
+        wb.save(response)
+        return response
+    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def export_csv(self, request):
+        """Export users to CSV - only for authenticated users"""
+        import csv
+        from django.http import HttpResponse
+        from django.utils import timezone
+        
+        # Get filtered queryset
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # If not staff, only allow export of own data
+        if not request.user.is_staff:
+            queryset = queryset.filter(id=request.user.id)
+        
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        filename = f"users_{timezone.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response.write('\ufeff')  # BOM for UTF-8
+        
+        writer = csv.writer(response)
+        writer.writerow(['ID', 'Username', 'Ism', 'Familiya', 'Email', 'Telefon', 'Telegram ID', 'Lavozim', 'Status', 'Yaratilgan sana'])
+        
+        for user in queryset:
+            position_name = ''
+            if user.position:
+                position_name = str(user.position.name) if hasattr(user.position, 'name') else str(user.position)
+            
+            writer.writerow([
+                user.id,
+                user.username or '',
+                user.first_name or '',
+                user.last_name or '',
+                user.email or '',
+                user.phone or '',
+                user.telegram_id or '',
+                position_name,
+                'Aktiv' if user.is_active else 'Nofaol',
+                user.date_joined.strftime('%Y-%m-%d %H:%M:%S') if user.date_joined else ''
+            ])
+        
+        return response
 
 
 class QuestionViewSet(viewsets.ModelViewSet):
