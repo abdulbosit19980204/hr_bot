@@ -180,6 +180,121 @@ function ResultsTable({ apiBaseUrl }) {
     }
   }
 
+  const handleExportExcel = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        alert('Export qilish uchun tizimga kirish kerak')
+        return
+      }
+      
+      // Build query params same as current filters
+      const params = {
+        search: searchTerm || undefined,
+        test: selectedTest || undefined,
+        user: selectedUser || undefined,
+        ordering: orderBy
+      }
+      
+      // Add status filter if needed
+      if (statusFilter === 'passed') {
+        // We'll filter in backend or handle in frontend
+      }
+      
+      // Remove undefined params
+      Object.keys(params).forEach(key => params[key] === undefined && delete params[key])
+      
+      const response = await axios.get(`${apiBaseUrl}/results/export_excel/`, {
+        params,
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        responseType: 'blob'
+      })
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers['content-disposition']
+      let filename = `test_results_${new Date().toISOString().split('T')[0]}.xlsx`
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i)
+        if (filenameMatch) {
+          filename = filenameMatch[1]
+        }
+      }
+      
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      
+      alert('Natijalar muvaffaqiyatli Excel formatida export qilindi!')
+    } catch (err) {
+      console.error('Error exporting results:', err)
+      alert(err.response?.data?.error || 'Natijalarni export qilishda xatolik yuz berdi')
+    }
+  }
+
+  const handleExportCSV = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        alert('Export qilish uchun tizimga kirish kerak')
+        return
+      }
+      
+      // Build query params same as current filters
+      const params = {
+        search: searchTerm || undefined,
+        test: selectedTest || undefined,
+        user: selectedUser || undefined,
+        ordering: orderBy
+      }
+      
+      // Remove undefined params
+      Object.keys(params).forEach(key => params[key] === undefined && delete params[key])
+      
+      const response = await axios.get(`${apiBaseUrl}/results/export_csv/`, {
+        params,
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        responseType: 'blob'
+      })
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers['content-disposition']
+      let filename = `test_results_${new Date().toISOString().split('T')[0]}.csv`
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i)
+        if (filenameMatch) {
+          filename = filenameMatch[1]
+        }
+      }
+      
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      
+      alert('Natijalar muvaffaqiyatli CSV formatida export qilindi!')
+    } catch (err) {
+      console.error('Error exporting results:', err)
+      alert(err.response?.data?.error || 'Natijalarni export qilishda xatolik yuz berdi')
+    }
+  }
+
   const handleSendNotification = async () => {
     if (selectedCandidates.size === 0) {
       alert('Iltimos, kamida bitta nomzodni tanlang')
@@ -274,6 +389,22 @@ function ResultsTable({ apiBaseUrl }) {
               📨 Notification yuborish ({selectedCandidates.size})
             </button>
           )}
+          <button
+            className="btn"
+            onClick={handleExportExcel}
+            style={{ margin: 0, background: '#229ED9' }}
+            title="Excel formatida export qilish"
+          >
+            ⬇ Excel
+          </button>
+          <button
+            className="btn"
+            onClick={handleExportCSV}
+            style={{ margin: 0, background: '#6c757d' }}
+            title="CSV formatida export qilish"
+          >
+            ⬇ CSV
+          </button>
           <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px' }}>
             <input
               type="text"

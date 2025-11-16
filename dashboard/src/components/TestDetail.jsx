@@ -208,6 +208,54 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
     }
   }
 
+  const handleExportResults = async (format = 'excel') => {
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        alert('Export qilish uchun tizimga kirish kerak')
+        return
+      }
+      
+      const endpoint = format === 'excel' ? 'export_excel' : 'export_csv'
+      const response = await axios.get(`${apiBaseUrl}/results/${endpoint}/`, {
+        params: {
+          test: test.id
+        },
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        responseType: 'blob'
+      })
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers['content-disposition']
+      const ext = format === 'excel' ? 'xlsx' : 'csv'
+      let filename = `test_${test.id}_results_${new Date().toISOString().split('T')[0]}.${ext}`
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i)
+        if (filenameMatch) {
+          filename = filenameMatch[1]
+        }
+      }
+      
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      
+      alert(`Test natijalari muvaffaqiyatli ${format.toUpperCase()} formatida export qilindi!`)
+    } catch (err) {
+      console.error('Error exporting results:', err)
+      alert(err.response?.data?.error || 'Natijalarni export qilishda xatolik yuz berdi')
+    }
+  }
+
   const handleEditQuestion = (question) => {
     setEditingQuestion({
       id: question.id,
@@ -966,7 +1014,29 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
 
       {/* Test Results */}
       <div className="table-card">
-        <h3 style={{ marginBottom: '20px' }}>Test natijalari ({testResults.length})</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h3 style={{ margin: 0 }}>Test natijalari ({testResults.length})</h3>
+          {testResults.length > 0 && (
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                className="btn"
+                onClick={() => handleExportResults('excel')}
+                style={{ margin: 0, background: '#229ED9', padding: '8px 16px', fontSize: '14px' }}
+                title="Excel formatida export qilish"
+              >
+                ⬇ Excel
+              </button>
+              <button
+                className="btn"
+                onClick={() => handleExportResults('csv')}
+                style={{ margin: 0, background: '#6c757d', padding: '8px 16px', fontSize: '14px' }}
+                title="CSV formatida export qilish"
+              >
+                ⬇ CSV
+              </button>
+            </div>
+          )}
+        </div>
         {testResults.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
             Bu test uchun natijalar topilmadi

@@ -1346,6 +1346,105 @@ class TestResultViewSet(viewsets.ModelViewSet):
             )
         
         return Response(response_data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def export_excel(self, request):
+        """Export test results to Excel - only for authenticated users"""
+        from django.http import HttpResponse
+        from openpyxl import Workbook
+        from django.utils import timezone
+        
+        # Get filtered queryset
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # If not staff, only allow export of own results
+        if not request.user.is_staff:
+            queryset = queryset.filter(user=request.user)
+        
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        filename = f"test_results_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Test Results"
+        
+        headers = ['ID', 'Foydalanuvchi', 'Email', 'Telefon', 'Lavozim', 'Test', 
+                  'Ball', 'To\'g\'ri javoblar', 'Jami savollar', 'Foiz', 'Holat', 'Sana']
+        ws.append(headers)
+        
+        for result in queryset:
+            # Handle position - convert to string safely
+            position_name = ''
+            if result.user.position:
+                position_name = str(result.user.position.name) if hasattr(result.user.position, 'name') else str(result.user.position)
+            
+            row = [
+                result.id,
+                f"{result.user.first_name} {result.user.last_name}".strip() or result.user.username,
+                result.user.email or '',
+                result.user.phone or '',
+                position_name,
+                result.test.title,
+                result.score,
+                result.correct_answers,
+                result.total_questions,
+                f"{result.score}%",
+                "O'tdi" if result.is_passed else "O'tmadi",
+                result.completed_at.strftime('%Y-%m-%d %H:%M:%S') if result.completed_at else ''
+            ]
+            ws.append(row)
+        
+        wb.save(response)
+        return response
+    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def export_csv(self, request):
+        """Export test results to CSV - only for authenticated users"""
+        import csv
+        from django.http import HttpResponse
+        from django.utils import timezone
+        
+        # Get filtered queryset
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # If not staff, only allow export of own results
+        if not request.user.is_staff:
+            queryset = queryset.filter(user=request.user)
+        
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        filename = f"test_results_{timezone.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response.write('\ufeff')  # BOM for UTF-8
+        
+        writer = csv.writer(response)
+        writer.writerow(['ID', 'Foydalanuvchi', 'Email', 'Telefon', 'Lavozim', 'Test', 
+                        'Ball', 'To\'g\'ri javoblar', 'Jami savollar', 'Foiz', 'Holat', 'Sana'])
+        
+        for result in queryset:
+            # Handle position - convert to string safely
+            position_name = ''
+            if result.user.position:
+                position_name = str(result.user.position.name) if hasattr(result.user.position, 'name') else str(result.user.position)
+            
+            writer.writerow([
+                result.id,
+                f"{result.user.first_name} {result.user.last_name}".strip() or result.user.username,
+                result.user.email or '',
+                result.user.phone or '',
+                position_name,
+                result.test.title,
+                result.score,
+                result.correct_answers,
+                result.total_questions,
+                f"{result.score}%",
+                "O'tdi" if result.is_passed else "O'tmadi",
+                result.completed_at.strftime('%Y-%m-%d %H:%M:%S') if result.completed_at else ''
+            ])
+        
+        return response
 
 
 class StatisticsView(APIView):
