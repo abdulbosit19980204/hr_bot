@@ -891,6 +891,70 @@ class QuestionViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ['test']
     search_fields = ['text']
+    
+    def get_serializer_context(self):
+        """Add admin_view context for serializer"""
+        context = super().get_serializer_context()
+        context['admin_view'] = True
+        return context
+    
+    def get_permissions(self):
+        """
+        AllowAny for list/retrieve, IsAuthenticated + is_superuser for create/update/delete
+        """
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsAuthenticated()]
+        return [IsAuthenticated()]
+    
+    def perform_create(self, serializer):
+        """Set test from request data"""
+        test_id = self.request.data.get('test')
+        if test_id:
+            from tests.models import Test
+            try:
+                test = Test.objects.get(pk=test_id)
+                serializer.save(test=test)
+            except Test.DoesNotExist:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({'test': 'Test topilmadi'})
+        else:
+            serializer.save()
+    
+    def create(self, request, *args, **kwargs):
+        """Create question - only for superusers"""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Permission denied. Only superusers can create questions.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().create(request, *args, **kwargs)
+    
+    def update(self, request, *args, **kwargs):
+        """Update question - only for superusers"""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Permission denied. Only superusers can update questions.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().update(request, *args, **kwargs)
+    
+    def partial_update(self, request, *args, **kwargs):
+        """Partial update question - only for superusers"""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Permission denied. Only superusers can update questions.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().partial_update(request, *args, **kwargs)
+    
+    def destroy(self, request, *args, **kwargs):
+        """Delete question - only for superusers"""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Permission denied. Only superusers can delete questions.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
 class UserViewSet(viewsets.ModelViewSet):

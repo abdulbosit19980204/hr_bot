@@ -16,6 +16,9 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [editingQuestion, setEditingQuestion] = useState(null)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
 
   useEffect(() => {
     loadTestData()
@@ -203,6 +206,125 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
       alert(err.response?.data?.error || 'Savollarni import qilishda xatolik yuz berdi')
       e.target.value = '' // Reset file input
     }
+  }
+
+  const handleEditQuestion = (question) => {
+    setEditingQuestion({
+      id: question.id,
+      text: question.text,
+      order: question.order,
+      options: question.options ? [...question.options].sort((a, b) => (a.order || 0) - (b.order || 0)) : []
+    })
+    setShowEditModal(true)
+  }
+
+  const handleDeleteQuestion = async (questionId) => {
+    if (!window.confirm('Bu savolni o\'chirishni tasdiqlaysizmi?')) {
+      return
+    }
+    
+    try {
+      const token = localStorage.getItem('access_token')
+      await axios.delete(`${apiBaseUrl}/questions/${questionId}/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      alert('Savol muvaffaqiyatli o\'chirildi!')
+      loadQuestions()
+    } catch (err) {
+      console.error('Error deleting question:', err)
+      alert(err.response?.data?.error || 'Savolni o\'chirishda xatolik yuz berdi')
+    }
+  }
+
+  const handleSaveQuestion = async () => {
+    if (!editingQuestion || !editingQuestion.text.trim()) {
+      alert('Savol matni bo\'sh bo\'lmasligi kerak!')
+      return
+    }
+    
+    // Validate options
+    if (!editingQuestion.options || editingQuestion.options.length < 2) {
+      alert('Kamida 2 ta javob varianti bo\'lishi kerak!')
+      return
+    }
+    
+    // Check if at least one option is correct
+    const hasCorrectOption = editingQuestion.options.some(opt => opt.is_correct)
+    if (!hasCorrectOption) {
+      alert('Kamida bitta to\'g\'ri javob belgilanishi kerak!')
+      return
+    }
+    
+    try {
+      const token = localStorage.getItem('access_token')
+      const questionData = {
+        text: editingQuestion.text,
+        order: editingQuestion.order || 0,
+        test: test.id,
+        options: editingQuestion.options.map((opt, idx) => ({
+          text: opt.text,
+          is_correct: opt.is_correct,
+          order: idx + 1
+        }))
+      }
+      
+      if (editingQuestion.id) {
+        // Update existing question
+        await axios.put(`${apiBaseUrl}/questions/${editingQuestion.id}/`, questionData, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+        alert('Savol muvaffaqiyatli yangilandi!')
+      } else {
+        // Create new question
+        await axios.post(`${apiBaseUrl}/questions/`, questionData, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+        alert('Savol muvaffaqiyatli qo\'shildi!')
+      }
+      
+      setShowEditModal(false)
+      setEditingQuestion(null)
+      loadQuestions()
+    } catch (err) {
+      console.error('Error saving question:', err)
+      alert(err.response?.data?.error || 'Savolni saqlashda xatolik yuz berdi')
+    }
+  }
+
+  const handleAddOption = () => {
+    if (!editingQuestion) return
+    setEditingQuestion({
+      ...editingQuestion,
+      options: [...(editingQuestion.options || []), { text: '', is_correct: false, order: (editingQuestion.options?.length || 0) + 1 }]
+    })
+  }
+
+  const handleRemoveOption = (index) => {
+    if (!editingQuestion || !editingQuestion.options) return
+    const newOptions = editingQuestion.options.filter((_, i) => i !== index)
+    setEditingQuestion({
+      ...editingQuestion,
+      options: newOptions
+    })
+  }
+
+  const handleOptionChange = (index, field, value) => {
+    if (!editingQuestion || !editingQuestion.options) return
+    const newOptions = [...editingQuestion.options]
+    newOptions[index] = { ...newOptions[index], [field]: value }
+    setEditingQuestion({
+      ...editingQuestion,
+      options: newOptions
+    })
   }
 
   const loadTestData = async () => {
@@ -424,9 +546,68 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
           
           {showQuestions && (
             <div>
+              {isSuperuser && (
+                <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => {
+                      setEditingQuestion({
+                        id: null,
+                        text: '',
+                        order: questionsCount + 1,
+                        options: [
+                          { text: '', is_correct: false, order: 1 },
+                          { text: '', is_correct: false, order: 2 }
+                        ]
+                      })
+                      setShowEditModal(true)
+                    }}
+                    style={{
+                      padding: '10px 20px',
+                      background: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '600'
+                    }}
+                  >
+                    + Yangi savol qo'shish
+                  </button>
+                </div>
+              )}
               {questions.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
                   Bu testda savollar topilmadi
+                  {isSuperuser && (
+                    <div style={{ marginTop: '10px' }}>
+                      <button
+                        onClick={() => {
+                          setEditingQuestion({
+                            id: null,
+                            text: '',
+                            order: 1,
+                            options: [
+                              { text: '', is_correct: false, order: 1 },
+                              { text: '', is_correct: false, order: 2 }
+                            ]
+                          })
+                          setShowEditModal(true)
+                        }}
+                        style={{
+                          padding: '10px 20px',
+                          background: '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                      >
+                        + Birinchi savolni qo'shish
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <>
@@ -472,10 +653,44 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
                             background: '#fafafa'
                           }}
                         >
-                          <div style={{ marginBottom: '16px' }}>
-                            <strong style={{ fontSize: '16px', color: '#333' }}>
+                          <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <strong style={{ fontSize: '16px', color: '#333', flex: 1 }}>
                               {globalIndex + 1}. {question.text}
                             </strong>
+                            {isSuperuser && (
+                              <div style={{ display: 'flex', gap: '8px', marginLeft: '16px' }}>
+                                <button
+                                  onClick={() => handleEditQuestion(question)}
+                                  style={{
+                                    padding: '6px 12px',
+                                    background: '#229ED9',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '14px'
+                                  }}
+                                  title="Tahrirlash"
+                                >
+                                  ✏
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteQuestion(question.id)}
+                                  style={{
+                                    padding: '6px 12px',
+                                    background: '#dc3545',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '14px'
+                                  }}
+                                  title="O'chirish"
+                                >
+                                  🗑
+                                </button>
+                              </div>
+                            )}
                           </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       {question.options && question.options.length > 0 ? (
@@ -565,6 +780,188 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
         >
           ↑
         </button>
+      )}
+
+      {/* Edit Question Modal */}
+      {showEditModal && editingQuestion && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '8px',
+            padding: '30px',
+            maxWidth: '700px',
+            width: '90%',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)'
+          }}>
+            <h2 style={{ marginBottom: '20px', color: '#333' }}>
+              {editingQuestion.id ? 'Savolni tahrirlash' : 'Yangi savol qo\'shish'}
+            </h2>
+            
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>
+                Savol matni:
+              </label>
+              <textarea
+                value={editingQuestion.text}
+                onChange={(e) => setEditingQuestion({ ...editingQuestion, text: e.target.value })}
+                style={{
+                  width: '100%',
+                  minHeight: '100px',
+                  padding: '10px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px',
+                  fontFamily: 'inherit'
+                }}
+                placeholder="Savol matnini kiriting..."
+              />
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>
+                Tartib raqami:
+              </label>
+              <input
+                type="number"
+                value={editingQuestion.order || 0}
+                onChange={(e) => setEditingQuestion({ ...editingQuestion, order: parseInt(e.target.value) || 0 })}
+                style={{
+                  width: '100px',
+                  padding: '8px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <label style={{ fontWeight: '600' }}>Javob variantlari:</label>
+                <button
+                  onClick={handleAddOption}
+                  style={{
+                    padding: '6px 12px',
+                    background: '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '14px'
+                  }}
+                >
+                  + Variant qo'shish
+                </button>
+              </div>
+              
+              {editingQuestion.options && editingQuestion.options.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {editingQuestion.options.map((option, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        display: 'flex',
+                        gap: '10px',
+                        alignItems: 'center',
+                        padding: '12px',
+                        border: '1px solid #ddd',
+                        borderRadius: '4px',
+                        background: option.is_correct ? '#d4edda' : '#fff'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={option.is_correct}
+                        onChange={(e) => handleOptionChange(index, 'is_correct', e.target.checked)}
+                        style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                        title="To'g'ri javob"
+                      />
+                      <input
+                        type="text"
+                        value={option.text}
+                        onChange={(e) => handleOptionChange(index, 'text', e.target.value)}
+                        placeholder={`Variant ${index + 1}`}
+                        style={{
+                          flex: 1,
+                          padding: '8px',
+                          border: '1px solid #ddd',
+                          borderRadius: '4px',
+                          fontSize: '14px'
+                        }}
+                      />
+                      <button
+                        onClick={() => handleRemoveOption(index)}
+                        style={{
+                          padding: '6px 12px',
+                          background: '#dc3545',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                        title="O'chirish"
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ color: '#999', fontStyle: 'italic', textAlign: 'center', padding: '20px' }}>
+                  Javob variantlari qo'shilmagan
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowEditModal(false)
+                  setEditingQuestion(null)
+                }}
+                style={{
+                  padding: '10px 20px',
+                  background: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                Bekor qilish
+              </button>
+              <button
+                onClick={handleSaveQuestion}
+                style={{
+                  padding: '10px 20px',
+                  background: '#229ED9',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                Saqlash
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Test Results */}

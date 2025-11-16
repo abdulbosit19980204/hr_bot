@@ -20,15 +20,15 @@ class AnswerOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = AnswerOption
         fields = ['id', 'text', 'is_correct', 'order']
-        read_only_fields = ['is_correct']
 
 
 class QuestionSerializer(serializers.ModelSerializer):
-    options = AnswerOptionSerializer(many=True, read_only=True)
+    options = AnswerOptionSerializer(many=True, required=False)
 
     class Meta:
         model = Question
-        fields = ['id', 'text', 'order', 'options']
+        fields = ['id', 'text', 'order', 'options', 'test']
+        read_only_fields = ['test']
     
     def to_representation(self, instance):
         """Randomize options order (only if not admin view)"""
@@ -45,6 +45,34 @@ class QuestionSerializer(serializers.ModelSerializer):
                 options.sort(key=lambda x: x.get('order', 0))
             data['options'] = options
         return data
+    
+    def create(self, validated_data):
+        """Create question with options"""
+        options_data = validated_data.pop('options', [])
+        question = Question.objects.create(**validated_data)
+        
+        for option_data in options_data:
+            AnswerOption.objects.create(question=question, **option_data)
+        
+        return question
+    
+    def update(self, instance, validated_data):
+        """Update question and options"""
+        options_data = validated_data.pop('options', None)
+        
+        instance.text = validated_data.get('text', instance.text)
+        instance.order = validated_data.get('order', instance.order)
+        instance.save()
+        
+        # Update options if provided
+        if options_data is not None:
+            # Delete existing options
+            instance.options.all().delete()
+            # Create new options
+            for option_data in options_data:
+                AnswerOption.objects.create(question=instance, **option_data)
+        
+        return instance
 
 
 class TestSerializer(serializers.ModelSerializer):
