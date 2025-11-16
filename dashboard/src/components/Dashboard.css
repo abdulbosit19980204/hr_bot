@@ -1979,22 +1979,7 @@ div[style*="textAlign: 'center'"][style*="padding: '40px'"] {
    Full View Toggle - Table Expansion
    ============================================ */
 .table-full-view-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
-  z-index: 9998;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.3s ease;
-}
-
-.table-full-view-overlay.active {
-  opacity: 1;
-  pointer-events: auto;
+  display: none; /* Overlay'ni yashirish - kerak emas */
 }
 
 .table-card.full-view {
@@ -2057,7 +2042,7 @@ div[style*="textAlign: 'center'"][style*="padding: '40px'"] {
   padding: var(--space-lg);
   margin: 0;
   border-bottom: 1px solid var(--border);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: none; /* Shadow olib tashlandi */
 }
 
 .table-card.full-view .table-wrapper {
@@ -2074,7 +2059,7 @@ div[style*="textAlign: 'center'"][style*="padding: '40px'"] {
   padding: var(--space-lg);
   margin: 0;
   border-top: 1px solid var(--border);
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: none; /* Shadow olib tashlandi */
   z-index: 100;
 }
 

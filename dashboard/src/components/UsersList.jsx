@@ -339,12 +339,6 @@ function UsersList({ apiBaseUrl }) {
 
   return (
     <>
-      {fullView && (
-        <div 
-          className={`table-full-view-overlay ${fullView ? 'active' : ''}`}
-          onClick={() => setFullView(false)}
-        />
-      )}
       <div className={`table-card ${fullView ? 'full-view' : ''}`} style={{ position: 'relative' }}>
         <div className="table-header-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <button
