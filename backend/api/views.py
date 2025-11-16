@@ -43,7 +43,7 @@ class PositionViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class TestViewSet(viewsets.ModelViewSet):
-    queryset = Test.objects.filter(is_active=True).prefetch_related('questions__options', 'positions')
+    queryset = Test.objects.all().prefetch_related('questions__options', 'positions')
     permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['is_active', 'positions']
@@ -94,6 +94,11 @@ class TestViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        
+        # Filter by is_active if provided, otherwise return all tests
+        # DjangoFilterBackend will handle is_active filter automatically via filterset_fields
+        # But we need to ensure default behavior doesn't filter by is_active
+        # The filterset_fields=['is_active'] will handle filtering when is_active param is provided
         
         # Filter by position if provided
         position_id = self.request.query_params.get('position_id')

@@ -307,10 +307,10 @@ function TestsList({ apiBaseUrl }) {
                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
                       <span 
                         onClick={() => handleTestClick(test)}
-                        style={{ fontSize: '20px', cursor: 'pointer', userSelect: 'none' }}
+                        style={{ fontSize: '18px', cursor: 'pointer', userSelect: 'none', color: '#229ED9' }}
                         title="Ko'rish"
                       >
-                        👁️
+                        👁
                       </span>
                       {isSuperuser && (
                         <>
@@ -319,10 +319,10 @@ function TestsList({ apiBaseUrl }) {
                               setEditingTest(test)
                               setShowEditModal(true)
                             }}
-                            style={{ fontSize: '20px', cursor: 'pointer', userSelect: 'none' }}
+                            style={{ fontSize: '18px', cursor: 'pointer', userSelect: 'none', color: '#ffc107' }}
                             title="Tahrirlash"
                           >
-                            ✏️
+                            ✏
                           </span>
                           <span 
                             onClick={() => {
@@ -330,10 +330,10 @@ function TestsList({ apiBaseUrl }) {
                                 handleDeleteTest(test.id)
                               }
                             }}
-                            style={{ fontSize: '20px', cursor: 'pointer', userSelect: 'none' }}
+                            style={{ fontSize: '18px', cursor: 'pointer', userSelect: 'none', color: '#dc3545' }}
                             title="O'chirish"
                           >
-                            🗑️
+                            🗑
                           </span>
                         </>
                       )}
@@ -691,10 +691,10 @@ function EditTestModal({ apiBaseUrl, test, positions, onClose, onSuccess }) {
           <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end', alignItems: 'center' }}>
             <span
               onClick={onClose}
-              style={{ fontSize: '24px', cursor: saving ? 'not-allowed' : 'pointer', userSelect: 'none', opacity: saving ? 0.5 : 1 }}
+              style={{ fontSize: '20px', cursor: saving ? 'not-allowed' : 'pointer', userSelect: 'none', opacity: saving ? 0.5 : 1, color: '#6c757d' }}
               title="Bekor qilish"
             >
-              ❌
+              ✕
             </span>
             <span
               onClick={(e) => {
@@ -703,10 +703,10 @@ function EditTestModal({ apiBaseUrl, test, positions, onClose, onSuccess }) {
                   if (form) form.requestSubmit()
                 }
               }}
-              style={{ fontSize: '24px', cursor: saving ? 'not-allowed' : 'pointer', userSelect: 'none', opacity: saving ? 0.5 : 1 }}
+              style={{ fontSize: '20px', cursor: saving ? 'not-allowed' : 'pointer', userSelect: 'none', opacity: saving ? 0.5 : 1, color: saving ? '#6c757d' : '#ffc107' }}
               title={saving ? 'Saqlanmoqda...' : 'Saqlash'}
             >
-              {saving ? '⏳' : '💾'}
+              {saving ? '⏳' : '✓'}
             </span>
           </div>
         </form>
@@ -1002,10 +1002,10 @@ function CreateTestModal({ apiBaseUrl, positions, onClose, onSuccess }) {
           <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end', alignItems: 'center' }}>
             <span
               onClick={onClose}
-              style={{ fontSize: '24px', cursor: saving ? 'not-allowed' : 'pointer', userSelect: 'none', opacity: saving ? 0.5 : 1 }}
+              style={{ fontSize: '20px', cursor: saving ? 'not-allowed' : 'pointer', userSelect: 'none', opacity: saving ? 0.5 : 1, color: '#6c757d' }}
               title="Bekor qilish"
             >
-              ❌
+              ✕
             </span>
             <span
               onClick={(e) => {
@@ -1014,10 +1014,10 @@ function CreateTestModal({ apiBaseUrl, positions, onClose, onSuccess }) {
                   if (form) form.requestSubmit()
                 }
               }}
-              style={{ fontSize: '24px', cursor: saving ? 'not-allowed' : 'pointer', userSelect: 'none', opacity: saving ? 0.5 : 1 }}
+              style={{ fontSize: '20px', cursor: saving ? 'not-allowed' : 'pointer', userSelect: 'none', opacity: saving ? 0.5 : 1, color: saving ? '#6c757d' : '#28a745' }}
               title={saving ? 'Yaratilmoqda...' : 'Yaratish'}
             >
-              {saving ? '⏳' : '✅'}
+              {saving ? '⏳' : '✓'}
             </span>
           </div>
         </form>
