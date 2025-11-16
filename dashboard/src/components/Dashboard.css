@@ -2016,23 +2016,7 @@ div[style*="textAlign: 'center'"][style*="padding: '40px'"] {
   }
 }
 
-.table-card.full-view .table-header-actions {
-  position: absolute;
-  top: var(--space-lg);
-  right: var(--space-lg);
-  z-index: 10000;
-}
-
-.table-card.full-view .table-header-actions .btn-icon {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-}
-
-.table-card.full-view .table-header-actions .btn-icon:hover {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: white;
-}
+/* Full-view header actions removed - button is now with other buttons */
 
 .table-card.full-view .table-filters {
   position: sticky;

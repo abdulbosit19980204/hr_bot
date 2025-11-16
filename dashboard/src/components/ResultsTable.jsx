@@ -406,21 +406,6 @@ function ResultsTable({ apiBaseUrl }) {
   return (
     <>
       <div className={`table-card ${fullView ? 'full-view' : ''}`} style={{ position: 'relative' }}>
-        <div className="table-header-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button
-            className="btn-icon"
-            onClick={() => setFullView(!fullView)}
-            title={fullView ? "Oddiy ko'rinish" : "To'liq ko'rinish"}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                setFullView(!fullView)
-              }
-            }}
-          >
-            <Icon name={fullView ? "minimize" : "maximize"} size={18} color="currentColor" />
-          </button>
-        </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <h3 style={{ margin: 0 }}>Barcha natijalar</h3>
@@ -437,6 +422,19 @@ function ResultsTable({ apiBaseUrl }) {
           )}
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn-icon"
+            onClick={() => setFullView(!fullView)}
+            title={fullView ? "Oddiy ko'rinish" : "To'liq ko'rinish"}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                setFullView(!fullView)
+              }
+            }}
+          >
+            <Icon name={fullView ? "minimize" : "maximize"} size={18} color="currentColor" />
+          </button>
           <button
             className="btn-icon"
             onClick={() => setShowFilters(!showFilters)}

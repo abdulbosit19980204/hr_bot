@@ -379,7 +379,9 @@ function TestsList({ apiBaseUrl }) {
   return (
     <>
       <div className={`table-card ${fullView ? 'full-view' : ''}`} style={{ position: 'relative' }}>
-        <div className="table-header-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+          <h3 style={{ margin: 0 }}>Testlar</h3>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             className="btn-icon"
             onClick={() => setFullView(!fullView)}
@@ -393,10 +395,6 @@ function TestsList({ apiBaseUrl }) {
           >
             <Icon name={fullView ? "minimize" : "maximize"} size={18} color="currentColor" />
           </button>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-          <h3 style={{ margin: 0 }}>Testlar</h3>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             className="btn-icon"
             onClick={() => setShowFilters(!showFilters)}
