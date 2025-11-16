@@ -1755,14 +1755,15 @@ class StatisticsView(APIView):
         total_cvs = CV.objects.count()
         cvs_this_week = CV.objects.filter(uploaded_at__gte=week_ago).count()
         avg_file_size = CV.objects.aggregate(avg=Avg('file_size'))['avg'] or 0
-        users_with_cv = User.objects.filter(cv__isnull=False).distinct().count()
+        # Users who have at least one CV
+        users_with_cv = User.objects.filter(cvs__isnull=False).distinct().count()
         # Users who passed at least one test and have a CV
         passed_results = TestResult.objects.annotate(
             passing_score=F('test__passing_score')
         ).filter(score__gte=F('passing_score'))
         users_passed_and_cv = User.objects.filter(
             id__in=passed_results.values_list('user_id', flat=True),
-            cv__isnull=False
+            cvs__isnull=False
         ).distinct().count()
         
         # G. Notifications
