@@ -40,12 +40,31 @@ function Statistics({ stats }) {
           <h3 style={{ marginBottom: '20px' }}>Lavozimlar bo'yicha testlar</h3>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={positionData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="value" fill="#229ED9" radius={[8, 8, 0, 0]} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#E6E6E6" opacity={0.5} />
+              <XAxis dataKey="name" stroke="#888888" fontSize={12} />
+              <YAxis stroke="#888888" fontSize={12} />
+              <Tooltip 
+                contentStyle={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E6E6E6',
+                  borderRadius: '12px',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.06)',
+                  padding: '12px'
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: '13px', color: '#555555' }} />
+              <Bar 
+                dataKey="value" 
+                fill="url(#colorGradient)" 
+                radius={[6, 6, 0, 0]}
+              >
+                <defs>
+                  <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#229ED9" />
+                    <stop offset="100%" stopColor="#1A7FB3" />
+                  </linearGradient>
+                </defs>
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
