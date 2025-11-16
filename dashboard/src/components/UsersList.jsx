@@ -336,45 +336,42 @@ function UsersList({ apiBaseUrl }) {
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
-            className="btn"
+            className="btn-icon"
             onClick={() => setShowFilters(!showFilters)}
-            style={{ margin: 0, background: '#6c757d' }}
-            title="Filtrlarni ko'rsatish/yashirish"
+            title={showFilters ? "Filtrlarni yashirish" : "Filtrlarni ko'rsatish"}
           >
-            <Icon name="filter" size={16} color="white" /> {showFilters ? 'Filtrlarni yashirish' : 'Filtrlarni ko\'rsatish'}
+            <Icon name="filter" size={18} color="currentColor" />
           </button>
           <button
-            className="btn"
+            className="btn-icon"
             onClick={() => setShowColumnSettings(!showColumnSettings)}
-            style={{ margin: 0, background: '#6c757d', position: 'relative' }}
+            style={{ position: 'relative' }}
             title="Ustunlarni boshqarish"
           >
-            <Icon name="settings" size={16} color="white" /> Ustunlar
+            <Icon name="settings" size={18} color="currentColor" />
           </button>
           {selectedUsers.size > 0 && (
             <button
-              className="btn"
+              className="btn-icon btn-icon-primary"
               onClick={() => setShowNotificationModal(true)}
-              style={{ margin: 0, background: '#28a745' }}
+              title="Tanlangan foydalanuvchilarga notification yuborish"
             >
-              <Icon name="bell" size={16} color="white" /> Notification ({selectedUsers.size})
+              <Icon name="bell" size={18} color="currentColor" />
             </button>
           )}
           <button
-            className="btn"
+            className="btn-icon btn-icon-primary"
             onClick={handleExportExcel}
-            style={{ margin: 0, background: '#229ED9' }}
             title="Excel formatida export qilish"
           >
-            <Icon name="download" size={16} color="white" /> Excel
+            <Icon name="download" size={18} color="currentColor" />
           </button>
           <button
-            className="btn"
+            className="btn-icon"
             onClick={handleExportCSV}
-            style={{ margin: 0, background: '#6c757d' }}
             title="CSV formatida export qilish"
           >
-            <Icon name="download" size={16} color="white" /> CSV
+            <Icon name="download" size={18} color="currentColor" />
           </button>
         </div>
       </div>
@@ -562,11 +559,11 @@ function UsersList({ apiBaseUrl }) {
                     <td>{user.created_at ? new Date(user.created_at).toLocaleDateString('uz-UZ') : '-'}</td>
                     <td>
                       <button 
-                        className="btn" 
+                        className="btn-icon" 
                         onClick={() => handleUserClick(user)}
-                        style={{ padding: '6px 12px', fontSize: '14px' }}
+                        title="Ko'rish"
                       >
-                        <Icon name="eye" size={14} color="currentColor" /> Ko'rish
+                        <Icon name="eye" size={18} color="currentColor" />
                       </button>
                     </td>
                   </tr>
