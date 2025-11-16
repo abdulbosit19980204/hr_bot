@@ -115,10 +115,15 @@ class UserSerializer(serializers.ModelSerializer):
     def get_tests_passed_count(self, obj):
         """Jami o'tgan testlar soni"""
         from tests.models import TestResult
+        from django.db.models import F
+        # is_passed property: score >= test.passing_score
         return TestResult.objects.filter(
             user=obj,
-            is_completed=True,
-            is_passed=True
+            is_completed=True
+        ).annotate(
+            passing_score=F('test__passing_score')
+        ).filter(
+            score__gte=F('passing_score')
         ).count()
     
     def get_tests_total_count(self, obj):
