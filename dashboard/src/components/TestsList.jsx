@@ -636,27 +636,14 @@ function TestsList({ apiBaseUrl }) {
           </table>
           </div>
           
-          {totalPages > 1 && (
-            <div style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'center' }}>
-              <button
-                className="btn"
-                onClick={() => setPage(page - 1)}
-                disabled={page === 1}
-              >
-                Oldingi
-              </button>
-              <span style={{ padding: '8px 16px', display: 'flex', alignItems: 'center' }}>
-                {page} / {totalPages}
-              </span>
-              <button
-                className="btn"
-                onClick={() => setPage(page + 1)}
-                disabled={page === totalPages}
-              >
-                Keyingi
-              </button>
-            </div>
-          )}
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            totalCount={totalCount}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </>
       )}
 
