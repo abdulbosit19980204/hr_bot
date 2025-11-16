@@ -1330,6 +1330,103 @@ class CVViewSet(viewsets.ModelViewSet):
             )
         
         return response
+    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def export_excel(self, request):
+        """Export CVs to Excel - only for authenticated users"""
+        from django.http import HttpResponse
+        from openpyxl import Workbook
+        from django.utils import timezone
+        
+        # Get filtered queryset
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # If not staff, only allow export of own CVs
+        if not request.user.is_staff:
+            queryset = queryset.filter(user=request.user)
+        
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        filename = f"cvs_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "CVs"
+        
+        headers = ['ID', 'Foydalanuvchi', 'Email', 'Telefon', 'Fayl nomi', 'Fayl hajmi (KB)', 'Yuklangan sana']
+        ws.append(headers)
+        
+        for cv in queryset:
+            user_name = f"{cv.user.first_name} {cv.user.last_name}".strip() or cv.user.username if cv.user else ''
+            
+            # Get file size in KB
+            file_size_kb = 0
+            if cv.file:
+                try:
+                    file_size_kb = round(cv.file.size / 1024, 2) if hasattr(cv.file, 'size') else 0
+                except:
+                    file_size_kb = 0
+            
+            row = [
+                cv.id,
+                user_name,
+                cv.user.email if cv.user else '',
+                cv.user.phone if cv.user else '',
+                cv.file.name.split('/')[-1] if cv.file else '',
+                file_size_kb,
+                cv.uploaded_at.strftime('%Y-%m-%d %H:%M:%S') if cv.uploaded_at else ''
+            ]
+            ws.append(row)
+        
+        wb.save(response)
+        return response
+    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def export_csv(self, request):
+        """Export CVs to CSV - only for authenticated users"""
+        import csv
+        from django.http import HttpResponse
+        from django.utils import timezone
+        
+        # Get filtered queryset
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # If not staff, only allow export of own CVs
+        if not request.user.is_staff:
+            queryset = queryset.filter(user=request.user)
+        
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        filename = f"cvs_{timezone.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response.write('\ufeff')  # BOM for UTF-8
+        
+        writer = csv.writer(response)
+        writer.writerow(['ID', 'Foydalanuvchi', 'Email', 'Telefon', 'Fayl nomi', 'Fayl hajmi (KB)', 'Yuklangan sana'])
+        
+        for cv in queryset:
+            user_name = f"{cv.user.first_name} {cv.user.last_name}".strip() or cv.user.username if cv.user else ''
+            
+            # Get file size in KB
+            file_size_kb = 0
+            if cv.file:
+                try:
+                    file_size_kb = round(cv.file.size / 1024, 2) if hasattr(cv.file, 'size') else 0
+                except:
+                    file_size_kb = 0
+            
+            writer.writerow([
+                cv.id,
+                user_name,
+                cv.user.email if cv.user else '',
+                cv.user.phone if cv.user else '',
+                cv.file.name.split('/')[-1] if cv.file else '',
+                file_size_kb,
+                cv.uploaded_at.strftime('%Y-%m-%d %H:%M:%S') if cv.uploaded_at else ''
+            ])
+        
+        return response
 
 
 class TestResultViewSet(viewsets.ModelViewSet):
