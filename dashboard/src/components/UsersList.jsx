@@ -470,10 +470,19 @@ function UsersList({ apiBaseUrl }) {
         </div>
       ) : (
         <>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            totalCount={totalCount}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            position="top"
+          />
           <div style={{ 
             overflowX: 'auto', 
             overflowY: 'auto',
-            maxHeight: 'calc(100vh - 400px)',
+            maxHeight: pageSize === 10 ? '400px' : pageSize === 25 ? '600px' : pageSize === 50 ? '800px' : 'calc(100vh - 400px)',
             position: 'relative',
             border: '1px solid var(--border)',
             borderRadius: '12px'
@@ -571,15 +580,6 @@ function UsersList({ apiBaseUrl }) {
               </tbody>
             </table>
           </div>
-          
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            totalCount={totalCount}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-          />
         </>
       )}
 

@@ -8,7 +8,8 @@ function Pagination({
   totalCount, 
   pageSize, 
   onPageChange, 
-  onPageSizeChange 
+  onPageSizeChange,
+  position = 'bottom'
 }) {
   if (totalPages <= 1 && !totalCount) {
     return null
@@ -40,7 +41,7 @@ function Pagination({
   }
 
   return (
-    <div className="pagination-container">
+    <div className={`pagination-container pagination-${position}`}>
       <div className="pagination-info">
         <span className="pagination-total">
           Jami: <strong>{totalCount}</strong>

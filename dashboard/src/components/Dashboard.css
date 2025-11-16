@@ -263,12 +263,29 @@
 }
 
 .sidebar-footer {
-  padding: var(--space-md);
+  margin-top: auto;
+  padding: var(--space-xs) var(--space-sm);
   border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .sidebar-logout {
+  width: 100%;
+  justify-content: center;
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-sm);
+  min-height: 40px;
   color: var(--error) !important;
+}
+
+.sidebar-logout .sidebar-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .sidebar-logout:hover {
@@ -1362,7 +1379,6 @@ table input[type="checkbox"]:focus {
    Professional Pagination
    ============================================ */
 .pagination-container {
-  margin-top: var(--space-lg);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1372,6 +1388,18 @@ table input[type="checkbox"]:focus {
   background: var(--bg-tertiary);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
+  position: sticky;
+  z-index: 10;
+}
+
+.pagination-top {
+  top: 0;
+  margin-bottom: var(--space-md);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.pagination-bottom {
+  margin-top: var(--space-lg);
 }
 
 .pagination-info {
