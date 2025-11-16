@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { Icon } from './Icons'
+import Pagination from './Pagination'
 import './Dashboard.css'
 
 function ResultsTable({ apiBaseUrl }) {
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [totalPages, setTotalPages] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedTest, setSelectedTest] = useState('')
   const [selectedUser, setSelectedUser] = useState('')
@@ -44,7 +47,7 @@ function ResultsTable({ apiBaseUrl }) {
 
   useEffect(() => {
     loadResults()
-  }, [page, searchTerm, selectedTest, selectedUser, statusFilter, orderBy])
+  }, [page, pageSize, searchTerm, selectedTest, selectedUser, statusFilter, orderBy])
 
   const loadTests = async () => {
     try {
@@ -91,6 +94,7 @@ function ResultsTable({ apiBaseUrl }) {
       
       const params = {
         page,
+        page_size: pageSize,
         search: searchTerm || undefined,
         test: selectedTest || undefined,
         user: selectedUser || undefined,
@@ -106,7 +110,8 @@ function ResultsTable({ apiBaseUrl }) {
       })
       setResults(response.data.results || response.data)
       if (response.data.count) {
-        setTotalPages(Math.ceil(response.data.count / 20))
+        setTotalCount(response.data.count)
+        setTotalPages(Math.ceil(response.data.count / pageSize))
       }
       setLoading(false)
     } catch (err) {
@@ -657,27 +662,14 @@ function ResultsTable({ apiBaseUrl }) {
             </table>
           </div>
           
-          {totalPages > 1 && (
-            <div style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'center' }}>
-              <button
-                className="btn"
-                onClick={() => setPage(page - 1)}
-                disabled={page === 1}
-              >
-                Oldingi
-              </button>
-              <span style={{ padding: '8px 16px', display: 'flex', alignItems: 'center' }}>
-                {page} / {totalPages}
-              </span>
-              <button
-                className="btn"
-                onClick={() => setPage(page + 1)}
-                disabled={page === totalPages}
-              >
-                Keyingi
-              </button>
-            </div>
-          )}
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            totalCount={totalCount}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </>
       )}
 

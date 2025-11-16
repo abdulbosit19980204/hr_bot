@@ -7,6 +7,7 @@ import TestsList from './TestsList'
 import CVsList from './CVsList'
 import NotificationsList from './NotificationsList'
 import PositionsList from './PositionsList'
+import ScrollToTop from './ScrollToTop'
 import { Icon } from './Icons'
 import './Dashboard.css'
 
@@ -158,6 +159,7 @@ function Dashboard({ onLogout, apiBaseUrl }) {
           )}
         </main>
       </div>
+      <ScrollToTop />
     </div>
   )
 }
