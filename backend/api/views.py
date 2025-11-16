@@ -12,6 +12,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.utils import timezone
 from datetime import timedelta
+from django.http import HttpResponse
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font, PatternFill, Alignment
 import random
 import logging
 import asyncio
@@ -176,9 +179,9 @@ class TestViewSet(viewsets.ModelViewSet):
         serializer = QuestionSerializer(paginated_questions, many=True, context={'admin_view': True, 'request': request})
         return paginator.get_paginated_response(serializer.data)
     
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
-    def import_questions(self, request, pk=None):
-        """Import questions from JSON file - only for superusers"""
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated])
+    def export_questions(self, request, pk=None):
+        """Export questions to Excel file - only for superusers"""
         if not request.user.is_authenticated or not request.user.is_superuser:
             return Response(
                 {'error': 'Permission denied. Superuser access required.'},
@@ -188,47 +191,178 @@ class TestViewSet(viewsets.ModelViewSet):
         test = self.get_object()
         
         try:
-            questions_data = request.data.get('questions', [])
-            if not questions_data:
+            # Get all questions
+            questions = test.questions.all().prefetch_related('options').order_by('order', 'id')
+            
+            # Create workbook
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Test Questions"
+            
+            # Test info
+            ws.cell(row=1, column=1).value = "Test ID:"
+            ws.cell(row=1, column=2).value = test.id
+            ws.cell(row=2, column=1).value = "Test nomi:"
+            ws.cell(row=2, column=2).value = test.title
+            ws.cell(row=3, column=1).value = "Tavsif:"
+            ws.cell(row=3, column=2).value = test.description or ""
+            ws.cell(row=4, column=1).value = "Savollar soni:"
+            ws.cell(row=4, column=2).value = questions.count()
+            
+            # Empty row
+            row = 6
+            
+            # Headers
+            headers = ['Savol', 'Variant 1', 'Variant 2', 'Variant 3', 'Variant 4', 'To\'g\'ri javob']
+            for col, header in enumerate(headers, start=1):
+                cell = ws.cell(row=row, column=col)
+                cell.value = header
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill(start_color="CCCCCC", end_color="CCCCCC", fill_type="solid")
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            
+            row += 1
+            
+            # Questions
+            for question in questions:
+                options = list(question.options.all().order_by('order', 'id'))
+                correct_option_num = None
+                
+                # Find correct option number
+                for idx, opt in enumerate(options[:4], start=1):
+                    if opt.is_correct:
+                        correct_option_num = idx
+                        break
+                
+                # Question text
+                ws.cell(row=row, column=1).value = question.text
+                
+                # Options (max 4)
+                for idx, opt in enumerate(options[:4], start=1):
+                    ws.cell(row=row, column=idx + 1).value = opt.text
+                
+                # Correct answer
+                ws.cell(row=row, column=6).value = correct_option_num if correct_option_num else ""
+                
+                row += 1
+            
+            # Auto-adjust column widths
+            for col in range(1, 7):
+                ws.column_dimensions[chr(64 + col)].width = 30
+            
+            # Create response
+            response = HttpResponse(
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            filename = f"test_{test.id}_questions_{timezone.now().strftime('%Y%m%d')}.xlsx"
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            
+            wb.save(response)
+            return response
+            
+        except Exception as e:
+            logger.error(f'Error exporting questions: {str(e)}')
+            return Response(
+                {'error': f'Export failed: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def import_questions(self, request, pk=None):
+        """Import questions from Excel file - only for superusers"""
+        if not request.user.is_authenticated or not request.user.is_superuser:
+            return Response(
+                {'error': 'Permission denied. Superuser access required.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        test = self.get_object()
+        
+        try:
+            if 'file' not in request.FILES:
                 return Response(
-                    {'error': 'Questions data is required'},
+                    {'error': 'Excel file is required'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+            
+            excel_file = request.FILES['file']
+            
+            # Load workbook
+            wb = load_workbook(excel_file, data_only=True)
+            ws = wb.active
             
             imported_count = 0
             errors = []
             
-            for idx, q_data in enumerate(questions_data):
+            # Find questions start row (skip test info, find headers)
+            start_row = 1
+            for row in range(1, 20):
+                if ws.cell(row=row, column=1).value and 'Savol' in str(ws.cell(row=row, column=1).value):
+                    start_row = row + 1
+                    break
+            
+            # Process questions
+            for row in range(start_row, ws.max_row + 1):
+                question_text = ws.cell(row=row, column=1).value
+                
+                # Skip empty rows
+                if not question_text or not str(question_text).strip():
+                    continue
+                
                 try:
+                    # Get options
+                    options = []
+                    for col in range(2, 6):  # Columns B-E (variants 1-4)
+                        option_text = ws.cell(row=row, column=col).value
+                        if option_text and str(option_text).strip():
+                            options.append(str(option_text).strip())
+                    
+                    if not options:
+                        errors.append(f"Qator {row}: Variantlar topilmadi")
+                        continue
+                    
+                    # Get correct answer
+                    correct_answer = ws.cell(row=row, column=6).value
+                    correct_option_num = None
+                    if correct_answer:
+                        try:
+                            correct_option_num = int(correct_answer)
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    if not correct_option_num or correct_option_num < 1 or correct_option_num > len(options):
+                        errors.append(f"Qator {row}: To'g'ri javob noto'g'ri (1-{len(options)} orasida bo'lishi kerak)")
+                        continue
+                    
                     # Create question
                     question = Question.objects.create(
                         test=test,
-                        text=q_data.get('text', ''),
-                        order=q_data.get('order', idx)
+                        text=str(question_text).strip(),
+                        order=imported_count
                     )
                     
                     # Create answer options
-                    options_data = q_data.get('options', [])
-                    for opt_idx, opt_data in enumerate(options_data):
+                    for idx, opt_text in enumerate(options, start=1):
                         AnswerOption.objects.create(
                             question=question,
-                            text=opt_data.get('text', ''),
-                            is_correct=opt_data.get('is_correct', False),
-                            order=opt_data.get('order', opt_idx)
+                            text=opt_text,
+                            is_correct=(idx == correct_option_num),
+                            order=idx - 1
                         )
                     
                     imported_count += 1
+                    
                 except Exception as e:
-                    errors.append(f"Question {idx + 1}: {str(e)}")
+                    errors.append(f"Qator {row}: {str(e)}")
             
             return Response({
                 'success': True,
                 'imported_count': imported_count,
-                'total_count': len(questions_data),
                 'errors': errors if errors else None
             }, status=status.HTTP_201_CREATED)
             
         except Exception as e:
+            logger.error(f'Error importing questions: {str(e)}')
             return Response(
                 {'error': f'Import failed: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST

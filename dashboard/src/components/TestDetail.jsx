@@ -103,58 +103,45 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
   const exportQuestions = async () => {
     try {
       const token = localStorage.getItem('access_token')
-      const headers = {}
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'responseType': 'blob'
       }
       
-      // Load all questions without pagination
-      const response = await axios.get(`${apiBaseUrl}/tests/${test.id}/questions_list/`, {
-        params: { 
-          page: 1,
-          page_size: 10000 // Large number to get all questions
-        },
-        headers
-      })
+      // Export to Excel
+      const response = await axios.get(
+        `${apiBaseUrl}/tests/${test.id}/export_questions/`,
+        { 
+          headers: { 'Authorization': `Bearer ${token}` },
+          responseType: 'blob'
+        }
+      )
       
-      const allQuestions = response.data.results || response.data
-      
-      // Format questions for export
-      const exportData = {
-        test_id: test.id,
-        test_title: test.title,
-        test_description: test.description,
-        export_date: new Date().toISOString(),
-        questions_count: allQuestions.length,
-        questions: allQuestions.map(q => ({
-          id: q.id,
-          text: q.text,
-          order: q.order,
-          options: q.options.map(opt => ({
-            id: opt.id,
-            text: opt.text,
-            is_correct: opt.is_correct,
-            order: opt.order
-          }))
-        }))
-      }
-      
-      // Create and download JSON file
-      const dataStr = JSON.stringify(exportData, null, 2)
-      const dataBlob = new Blob([dataStr], { type: 'application/json' })
-      const url = URL.createObjectURL(dataBlob)
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
       link.href = url
-      link.download = `test_${test.id}_questions_${new Date().toISOString().split('T')[0]}.json`
+      
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers['content-disposition']
+      let filename = `test_${test.id}_questions_${new Date().toISOString().split('T')[0]}.xlsx`
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i)
+        if (filenameMatch) {
+          filename = filenameMatch[1]
+        }
+      }
+      
+      link.download = filename
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
-      URL.revokeObjectURL(url)
+      window.URL.revokeObjectURL(url)
       
-      alert(`Savollar muvaffaqiyatli export qilindi! (${allQuestions.length} ta savol)`)
+      alert('Savollar muvaffaqiyatli Excel formatida export qilindi!')
     } catch (err) {
       console.error('Error exporting questions:', err)
-      alert('Savollarni export qilishda xatolik yuz berdi')
+      alert(err.response?.data?.error || 'Savollarni export qilishda xatolik yuz berdi')
     }
   }
 
@@ -162,41 +149,42 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
     const file = e.target.files[0]
     if (!file) return
     
+    // Validate file type
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+      alert('Faqat Excel fayllar (.xlsx, .xls) qabul qilinadi!')
+      e.target.value = '' // Reset file input
+      return
+    }
+    
     try {
-      const text = await file.text()
-      const importData = JSON.parse(text)
-      
-      // Validate import data
-      if (!importData.questions || !Array.isArray(importData.questions)) {
-        alert('Noto\'g\'ri JSON format. "questions" array bo\'lishi kerak.')
-        e.target.value = '' // Reset file input
-        return
-      }
-      
       // Confirm import
-      const confirmMsg = `${importData.questions.length} ta savol import qilishni tasdiqlaysizmi?`
-      if (!window.confirm(confirmMsg)) {
+      if (!window.confirm('Excel fayldan savollarni import qilishni tasdiqlaysizmi?')) {
         e.target.value = '' // Reset file input
         return
       }
       
       const token = localStorage.getItem('access_token')
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
+      
+      // Create FormData for file upload
+      const formData = new FormData()
+      formData.append('file', file)
       
       // Send to backend
       const response = await axios.post(
         `${apiBaseUrl}/tests/${test.id}/import_questions/`,
-        { questions: importData.questions },
-        { headers }
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        }
       )
       
       if (response.data.success) {
-        const msg = `Muvaffaqiyatli import qilindi: ${response.data.imported_count} / ${response.data.total_count} ta savol`
+        const msg = `Muvaffaqiyatli import qilindi: ${response.data.imported_count} ta savol`
         if (response.data.errors && response.data.errors.length > 0) {
-          alert(`${msg}\n\nXatoliklar:\n${response.data.errors.join('\n')}`)
+          alert(`${msg}\n\nXatoliklar:\n${response.data.errors.slice(0, 10).join('\n')}${response.data.errors.length > 10 ? `\n... va yana ${response.data.errors.length - 10} ta xatolik` : ''}`)
         } else {
           alert(msg)
         }
@@ -409,14 +397,14 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
                   <span
                     onClick={exportQuestions}
                     style={{ fontSize: '18px', cursor: 'pointer', userSelect: 'none', color: '#28a745' }}
-                    title="Export qilish (JSON)"
+                    title="Export qilish (Excel)"
                   >
                     ⬇
                   </span>
-                  <label style={{ fontSize: '18px', cursor: 'pointer', userSelect: 'none', color: '#229ED9' }} title="Import qilish (JSON)">
+                  <label style={{ fontSize: '18px', cursor: 'pointer', userSelect: 'none', color: '#229ED9' }} title="Import qilish (Excel)">
                     <input
                       type="file"
-                      accept=".json"
+                      accept=".xlsx,.xls"
                       style={{ display: 'none' }}
                       onChange={handleImportQuestions}
                     />
