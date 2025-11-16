@@ -22,6 +22,7 @@ function ResultsTable({ apiBaseUrl }) {
   const [notificationType, setNotificationType] = useState('interview')
   const [sendingNotification, setSendingNotification] = useState(false)
   const [showColumnSettings, setShowColumnSettings] = useState(false)
+  const [showFilters, setShowFilters] = useState(true)
   
   // Column visibility state
   const [visibleColumns, setVisibleColumns] = useState({
@@ -397,6 +398,14 @@ function ResultsTable({ apiBaseUrl }) {
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             className="btn"
+            onClick={() => setShowFilters(!showFilters)}
+            style={{ margin: 0, background: '#6c757d' }}
+            title="Filtrlarni ko'rsatish/yashirish"
+          >
+            <Icon name="filter" size={16} color="white" /> {showFilters ? 'Filtrlarni yashirish' : 'Filtrlarni ko\'rsatish'}
+          </button>
+          <button
+            className="btn"
             onClick={() => setShowColumnSettings(!showColumnSettings)}
             style={{ margin: 0, background: '#6c757d', position: 'relative' }}
             title="Ustunlarni boshqarish"
@@ -428,7 +437,19 @@ function ResultsTable({ apiBaseUrl }) {
           >
             <Icon name="download" size={16} color="white" /> CSV
           </button>
-          <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px' }}>
+        </div>
+      </div>
+
+      {/* Filters Section - Toggleable */}
+      {showFilters && (
+        <div style={{ 
+          marginBottom: '20px', 
+          padding: '16px', 
+          background: 'var(--bg-tertiary)', 
+          borderRadius: '12px',
+          border: '1px solid var(--border)'
+        }}>
+          <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <input
               type="text"
               className="input"
@@ -514,7 +535,7 @@ function ResultsTable({ apiBaseUrl }) {
             )}
           </form>
         </div>
-      </div>
+      )}
 
       {/* Column Settings Dropdown */}
       {showColumnSettings && (
@@ -572,8 +593,15 @@ function ResultsTable({ apiBaseUrl }) {
         </div>
       ) : (
         <>
-          <div style={{ overflowX: 'auto', position: 'relative' }}>
-            <table>
+          <div style={{ 
+            overflowX: 'auto', 
+            overflowY: 'auto',
+            maxHeight: 'calc(100vh - 400px)',
+            position: 'relative',
+            border: '1px solid var(--border)',
+            borderRadius: '12px'
+          }}>
+            <table style={{ width: '100%', minWidth: '100%' }}>
               <thead>
                 <tr>
                   <th>
