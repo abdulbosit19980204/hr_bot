@@ -34,16 +34,53 @@ from .serializers import (
 User = get_user_model()
 
 
-class PositionViewSet(viewsets.ReadOnlyModelViewSet):
-    """Position viewset - faqat ochiq positionlarni qaytaradi"""
-    queryset = Position.objects.filter(is_open=True)
+class PositionViewSet(viewsets.ModelViewSet):
+    """Position viewset - superuser uchun to'liq CRUD, boshqalar uchun faqat ochiq positionlar"""
     serializer_class = PositionSerializer
-    permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['is_open']
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'created_at']
     ordering = ['name']
+    
+    def get_queryset(self):
+        """Superuser uchun barcha positionlar, boshqalar uchun faqat ochiq positionlar"""
+        if self.request.user.is_authenticated and self.request.user.is_superuser:
+            return Position.objects.all()
+        return Position.objects.filter(is_open=True)
+    
+    def get_permissions(self):
+        """AllowAny for list/retrieve, IsAuthenticated + is_superuser for create/update/delete"""
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsAuthenticated()]
+        return [AllowAny()]
+    
+    def create(self, request, *args, **kwargs):
+        """Create position - only for superusers"""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superusers can create positions'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().create(request, *args, **kwargs)
+    
+    def update(self, request, *args, **kwargs):
+        """Update position - only for superusers"""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superusers can update positions'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().update(request, *args, **kwargs)
+    
+    def destroy(self, request, *args, **kwargs):
+        """Delete position - only for superusers"""
+        if not request.user.is_superuser:
+            return Response(
+                {'error': 'Only superusers can delete positions'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().destroy(request, *args, **kwargs)
 
 
 class TestViewSet(viewsets.ModelViewSet):

@@ -1,0 +1,536 @@
+import React, { useState, useEffect } from 'react'
+import axios from 'axios'
+import './Dashboard.css'
+
+function PositionsList({ apiBaseUrl }) {
+  const [positions, setPositions] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [isOpenFilter, setIsOpenFilter] = useState('')
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [isSuperuser, setIsSuperuser] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingPosition, setEditingPosition] = useState(null)
+  
+  // Form states
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    is_open: true
+  })
+
+  useEffect(() => {
+    loadPositions()
+    checkSuperuser()
+  }, [page, searchTerm, isOpenFilter])
+
+  const checkSuperuser = async () => {
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        setIsSuperuser(false)
+        return
+      }
+      
+      const headers = {
+        'Authorization': `Bearer ${token}`
+      }
+      
+      // Try to create a position to check permission
+      try {
+        await axios.post(
+          `${apiBaseUrl}/positions/`,
+          {
+            name: '__permission_check__',
+            description: '',
+            is_open: false
+          },
+          { headers }
+        )
+        setIsSuperuser(true)
+        // Delete the test position
+        // We'll handle this by checking if we can access all positions
+      } catch (err) {
+        if (err.response?.status === 403) {
+          setIsSuperuser(false)
+        } else {
+          // Other error - might be validation, check by trying to get all positions
+          try {
+            const response = await axios.get(`${apiBaseUrl}/positions/`, {
+              headers,
+              params: { page_size: 100 }
+            })
+            // If we can see closed positions, we're superuser
+            const hasClosed = (response.data.results || response.data).some(p => !p.is_open)
+            setIsSuperuser(hasClosed)
+          } catch {
+            setIsSuperuser(false)
+          }
+        }
+      }
+    } catch (err) {
+      setIsSuperuser(false)
+    }
+  }
+
+  const loadPositions = async () => {
+    try {
+      setLoading(true)
+      const token = localStorage.getItem('access_token')
+      const headers = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+      
+      const params = {
+        page,
+        search: searchTerm || undefined,
+        is_open: isOpenFilter || undefined
+      }
+      
+      // Remove undefined params
+      Object.keys(params).forEach(key => params[key] === undefined && delete params[key])
+      
+      const response = await axios.get(`${apiBaseUrl}/positions/`, {
+        params,
+        headers
+      })
+      
+      setPositions(response.data.results || response.data)
+      if (response.data.count) {
+        setTotalPages(Math.ceil(response.data.count / 20))
+      }
+      setLoading(false)
+    } catch (err) {
+      console.error('Error loading positions:', err)
+      if (err.response?.status === 401) {
+        localStorage.removeItem('access_token')
+        window.location.reload()
+      }
+      setError(err.response?.data?.error || err.message || 'Xatolik yuz berdi')
+      setLoading(false)
+    }
+  }
+
+  const handleSearch = (e) => {
+    e.preventDefault()
+    setPage(1)
+    loadPositions()
+  }
+
+  const handleCreate = () => {
+    setFormData({ name: '', description: '', is_open: true })
+    setShowCreateModal(true)
+  }
+
+  const handleEdit = (position) => {
+    setEditingPosition(position)
+    setFormData({
+      name: position.name,
+      description: position.description || '',
+      is_open: position.is_open
+    })
+    setShowEditModal(true)
+  }
+
+  const handleDelete = async (positionId) => {
+    if (!window.confirm('Bu lavozimni o\'chirishni tasdiqlaysizmi?')) {
+      return
+    }
+    
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        alert('O\'chirish uchun tizimga kirish kerak')
+        return
+      }
+      
+      await axios.delete(`${apiBaseUrl}/positions/${positionId}/`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      
+      alert('Lavozim muvaffaqiyatli o\'chirildi!')
+      loadPositions()
+    } catch (err) {
+      console.error('Error deleting position:', err)
+      alert(err.response?.data?.error || 'Lavozimni o\'chirishda xatolik yuz berdi')
+    }
+  }
+
+  const handleSubmitCreate = async (e) => {
+    e.preventDefault()
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        alert('Yaratish uchun tizimga kirish kerak')
+        return
+      }
+      
+      await axios.post(
+        `${apiBaseUrl}/positions/`,
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+      
+      alert('Lavozim muvaffaqiyatli yaratildi!')
+      setShowCreateModal(false)
+      setFormData({ name: '', description: '', is_open: true })
+      loadPositions()
+    } catch (err) {
+      console.error('Error creating position:', err)
+      alert(err.response?.data?.error || err.response?.data?.name?.[0] || 'Lavozimni yaratishda xatolik yuz berdi')
+    }
+  }
+
+  const handleSubmitEdit = async (e) => {
+    e.preventDefault()
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        alert('Tahrirlash uchun tizimga kirish kerak')
+        return
+      }
+      
+      await axios.patch(
+        `${apiBaseUrl}/positions/${editingPosition.id}/`,
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+      
+      alert('Lavozim muvaffaqiyatli yangilandi!')
+      setShowEditModal(false)
+      setEditingPosition(null)
+      setFormData({ name: '', description: '', is_open: true })
+      loadPositions()
+    } catch (err) {
+      console.error('Error updating position:', err)
+      alert(err.response?.data?.error || err.response?.data?.name?.[0] || 'Lavozimni yangilashda xatolik yuz berdi')
+    }
+  }
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '-'
+    return new Date(dateString).toLocaleDateString('uz-UZ', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+  }
+
+  if (loading && positions.length === 0) {
+    return <div className="loading">Yuklanmoqda...</div>
+  }
+
+  if (error) {
+    return <div className="error">{error}</div>
+  }
+
+  return (
+    <div className="table-card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+        <h3 style={{ margin: 0 }}>Lavozimlar</h3>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {isSuperuser && (
+            <button
+              className="btn"
+              onClick={handleCreate}
+              style={{ margin: 0, background: '#28a745' }}
+            >
+              + Yangi lavozim
+            </button>
+          )}
+          <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px' }}>
+            <input
+              type="text"
+              className="input"
+              placeholder="Nom yoki tavsif qidirish..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ width: '250px', margin: 0 }}
+            />
+            <select
+              className="input"
+              value={isOpenFilter}
+              onChange={(e) => {
+                setIsOpenFilter(e.target.value)
+                setPage(1)
+              }}
+              style={{ width: '150px', margin: 0 }}
+            >
+              <option value="">Barcha</option>
+              <option value="true">Ochiq</option>
+              <option value="false">Yopiq</option>
+            </select>
+            <button type="submit" className="btn" style={{ margin: 0 }}>Qidirish</button>
+          </form>
+        </div>
+      </div>
+
+      {positions.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+          Lavozimlar topilmadi
+        </div>
+      ) : (
+        <>
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nomi</th>
+                <th>Tavsif</th>
+                <th>Holat</th>
+                <th>Testlar soni</th>
+                <th>Yaratilgan</th>
+                {isSuperuser && <th>Harakatlar</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {positions.map((position) => (
+                <tr key={position.id}>
+                  <td>{position.id}</td>
+                  <td>{position.name}</td>
+                  <td style={{ maxWidth: '300px', wordBreak: 'break-word' }}>
+                    {position.description || '-'}
+                  </td>
+                  <td>
+                    {position.is_open ? (
+                      <span style={{ color: '#28a745' }}>Ochiq</span>
+                    ) : (
+                      <span style={{ color: '#dc3545' }}>Yopiq</span>
+                    )}
+                  </td>
+                  <td>{position.tests_count || 0}</td>
+                  <td>{formatDate(position.created_at)}</td>
+                  {isSuperuser && (
+                    <td>
+                      <button
+                        className="btn"
+                        onClick={() => handleEdit(position)}
+                        style={{ 
+                          padding: '4px 8px', 
+                          fontSize: '14px', 
+                          marginRight: '5px',
+                          background: '#229ED9'
+                        }}
+                        title="Tahrirlash"
+                      >
+                        ✏
+                      </button>
+                      <button
+                        className="btn"
+                        onClick={() => handleDelete(position.id)}
+                        style={{ 
+                          padding: '4px 8px', 
+                          fontSize: '14px',
+                          background: '#dc3545'
+                        }}
+                        title="O'chirish"
+                      >
+                        🗑
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          
+          {totalPages > 1 && (
+            <div style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button
+                className="btn"
+                onClick={() => setPage(page - 1)}
+                disabled={page === 1}
+              >
+                Oldingi
+              </button>
+              <span style={{ padding: '8px 16px', display: 'flex', alignItems: 'center' }}>
+                {page} / {totalPages}
+              </span>
+              <button
+                className="btn"
+                onClick={() => setPage(page + 1)}
+                disabled={page === totalPages}
+              >
+                Keyingi
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Create Modal */}
+      {showCreateModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            width: '90%',
+            maxWidth: '500px',
+            maxHeight: '90vh',
+            overflow: 'auto'
+          }}>
+            <h3 style={{ marginTop: 0 }}>Yangi lavozim qo'shish</h3>
+            <form onSubmit={handleSubmitCreate}>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+                  Nomi *
+                </label>
+                <input
+                  type="text"
+                  className="input"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+                  Tavsif
+                </label>
+                <textarea
+                  className="input"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  rows={4}
+                  style={{ resize: 'vertical' }}
+                />
+              </div>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.is_open}
+                    onChange={(e) => setFormData({ ...formData, is_open: e.target.checked })}
+                  />
+                  <span>Ochiq (faol)</span>
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setShowCreateModal(false)}
+                  style={{ background: '#6c757d' }}
+                >
+                  Bekor qilish
+                </button>
+                <button type="submit" className="btn" style={{ background: '#28a745' }}>
+                  Yaratish
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && editingPosition && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            width: '90%',
+            maxWidth: '500px',
+            maxHeight: '90vh',
+            overflow: 'auto'
+          }}>
+            <h3 style={{ marginTop: 0 }}>Lavozimni tahrirlash</h3>
+            <form onSubmit={handleSubmitEdit}>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+                  Nomi *
+                </label>
+                <input
+                  type="text"
+                  className="input"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>
+                  Tavsif
+                </label>
+                <textarea
+                  className="input"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  rows={4}
+                  style={{ resize: 'vertical' }}
+                />
+              </div>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.is_open}
+                    onChange={(e) => setFormData({ ...formData, is_open: e.target.checked })}
+                  />
+                  <span>Ochiq (faol)</span>
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    setShowEditModal(false)
+                    setEditingPosition(null)
+                  }}
+                  style={{ background: '#6c757d' }}
+                >
+                  Bekor qilish
+                </button>
+                <button type="submit" className="btn" style={{ background: '#229ED9' }}>
+                  Saqlash
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default PositionsList
+
