@@ -157,8 +157,8 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
     }
     
     try {
-      // Confirm import
-      if (!window.confirm('Excel fayldan savollarni import qilishni tasdiqlaysizmi?')) {
+      // Confirm import - test mavjud, faqat savollar import qilinadi
+      if (!window.confirm(`Mavjud testga savollarni import qilishni tasdiqlaysizmi?\n(Test ma'lumotlari o'zgartirilmaydi, faqat savollar qo'shiladi)`)) {
         e.target.value = '' // Reset file input
         return
       }
@@ -169,7 +169,7 @@ function TestDetail({ test, apiBaseUrl, onBack }) {
       const formData = new FormData()
       formData.append('file', file)
       
-      // Send to backend
+      // Send to backend - import questions to existing test
       const response = await axios.post(
         `${apiBaseUrl}/tests/${test.id}/import_questions/`,
         formData,
