@@ -5,7 +5,23 @@ import Login from './components/Login'
 import ToastContainer from './components/ToastContainer'
 import './App.css'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+const getApiBaseUrl = () => {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL
+  }
+
+  const protocol = window.location?.protocol
+  const host = window.location?.host
+
+  if (host && host !== 'localhost:3000' && host !== '127.0.0.1:3000') {
+    return `${protocol}//${host}/api`
+  }
+
+  return 'http://localhost:8000/api'
+}
+
+const API_BASE_URL = getApiBaseUrl()
+axios.defaults.baseURL = API_BASE_URL
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)

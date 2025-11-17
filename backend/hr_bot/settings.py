@@ -222,10 +222,23 @@ else:
             'http://127.0.0.1:3000',
             'http://127.0.0.1:5173',
             'https://unfunereal-matilda-frenular.ngrok-free.dev',
+            'https://*.ngrok-free.dev',
             'http://178.218.200.120:8523',
         ]
     )
     CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = env.list(
+    'CSRF_TRUSTED_ORIGINS',
+    default=[
+        'https://unfunereal-matilda-frenular.ngrok-free.dev',
+        'https://*.ngrok-free.dev',
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+    ]
+)
 
 # Telegram Bot settings
 TELEGRAM_BOT_TOKEN = env('TELEGRAM_BOT_TOKEN', default='')
