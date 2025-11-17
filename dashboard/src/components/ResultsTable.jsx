@@ -5,6 +5,13 @@ import Pagination from './Pagination'
 import './Dashboard.css'
 
 function ResultsTable({ apiBaseUrl }) {
+  const normalizeList = (payload) => {
+    if (!payload) return []
+    if (Array.isArray(payload)) return payload
+    if (Array.isArray(payload.results)) return payload.results
+    if (Array.isArray(payload.data)) return payload.data
+    return []
+  }
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -78,7 +85,7 @@ function ResultsTable({ apiBaseUrl }) {
       }
       
       const response = await axios.get(`${apiBaseUrl}/tests/`, { headers })
-      setTests(response.data.results || response.data)
+      setTests(normalizeList(response.data))
     } catch (err) {
       console.error('Error loading tests:', err)
     }
@@ -96,7 +103,7 @@ function ResultsTable({ apiBaseUrl }) {
         params: { page_size: 100 },
         headers 
       })
-      setUsers(response.data.results || response.data)
+      setUsers(normalizeList(response.data))
     } catch (err) {
       console.error('Error loading users:', err)
     }
@@ -128,10 +135,14 @@ function ResultsTable({ apiBaseUrl }) {
         params,
         headers: headers
       })
-      setResults(response.data.results || response.data)
-      if (response.data.count) {
-        setTotalCount(response.data.count)
-        setTotalPages(Math.ceil(response.data.count / pageSize))
+      const normalizedResults = normalizeList(response.data)
+      setResults(normalizedResults)
+      const count = response.data?.count ?? normalizedResults.length ?? 0
+      setTotalCount(count)
+      if (count > 0) {
+        setTotalPages(Math.ceil(count / pageSize))
+      } else {
+        setTotalPages(1)
       }
       setLoading(false)
     } catch (err) {

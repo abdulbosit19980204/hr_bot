@@ -10,11 +10,22 @@ const getApiBaseUrl = () => {
     return import.meta.env.VITE_API_BASE_URL
   }
 
-  const protocol = window.location?.protocol
-  const host = window.location?.host
+  if (typeof window !== 'undefined' && window.location) {
+    const { protocol, hostname, port } = window.location
 
-  if (host && host !== 'localhost:3000' && host !== '127.0.0.1:3000') {
-    return `${protocol}//${host}/api`
+    // Ngrok or custom domains (no dev port) should use same host
+    if (hostname && hostname.includes('ngrok')) {
+      return `${protocol}//${hostname}${port ? `:${port}` : ''}/api`
+    }
+
+    // If running from LAN (e.g., 192.168.x.x:3000) use same host but backend port 8000
+    if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      const backendPort = port === '3000' || port === '5173' || !port ? '8000' : port
+      return `${protocol}//${hostname}:${backendPort}/api`
+    }
+
+    // Default localhost dev
+    return 'http://localhost:8000/api'
   }
 
   return 'http://localhost:8000/api'
