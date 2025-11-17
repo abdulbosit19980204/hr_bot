@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import axios from 'axios'
+import { Icon } from './Icons'
 
 function CVUploadPage({ user, apiBaseUrl }) {
   const [file, setFile] = useState(null)
@@ -88,9 +89,30 @@ function CVUploadPage({ user, apiBaseUrl }) {
     return (
       <div>
         <div className="card result-card">
-          <div className="success">
-            <h2>✅ CV muvaffaqiyatli yuklandi!</h2>
-            <p style={{ marginTop: '16px' }}>
+          <div className="success" style={{ 
+            textAlign: 'center',
+            padding: 'var(--space-2xl)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 'var(--space-lg)'
+          }}>
+            <Icon name="check-circle" size={64} color="var(--success)" />
+            <h2 style={{ 
+              fontSize: 'var(--font-size-2xl)',
+              fontWeight: 'var(--font-weight-semibold)',
+              color: 'var(--success)',
+              margin: 0
+            }}>
+              CV muvaffaqiyatli yuklandi!
+            </h2>
+            <p style={{ 
+              marginTop: 'var(--space-md)',
+              fontSize: 'var(--font-size-base)',
+              color: 'var(--text-secondary)',
+              maxWidth: '500px',
+              lineHeight: '1.6'
+            }}>
               Sizning ma'lumotlaringiz va natijalaringiz saqlandi.
               Tez orada siz bilan bog'lanamiz.
             </p>
@@ -103,18 +125,38 @@ function CVUploadPage({ user, apiBaseUrl }) {
   return (
     <div>
       <div className="card">
-        <h2 style={{ marginBottom: '16px' }}>CV yuklash</h2>
-        <p style={{ color: '#666', marginBottom: '24px' }}>
+        <h2 style={{ 
+          marginBottom: 'var(--space-lg)', 
+          fontSize: 'var(--font-size-xl)',
+          fontWeight: 'var(--font-weight-semibold)',
+          color: 'var(--text-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-sm)'
+        }}>
+          <Icon name="upload" size={24} color="var(--primary)" />
+          CV yuklash
+        </h2>
+        <p style={{ 
+          color: 'var(--text-secondary)', 
+          marginBottom: 'var(--space-xl)',
+          fontSize: 'var(--font-size-base)',
+          lineHeight: '1.6'
+        }}>
           Iltimos, CV faylingizni yuklang (PDF yoki DOCX formatida, maksimal 10MB)
         </p>
 
         {error && <div className="error">{error}</div>}
 
         <div
-          className={`file-upload ${file ? 'dragover' : ''}`}
+          className={`file-upload ${file ? 'has-file' : ''}`}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
           onClick={() => document.getElementById('file-input').click()}
+          style={{ 
+            position: 'relative',
+            transition: 'all var(--transition-base)'
+          }}
         >
           <input
             id="file-input"
@@ -125,27 +167,73 @@ function CVUploadPage({ user, apiBaseUrl }) {
           />
           
           {file ? (
-            <div>
-              <div style={{ fontSize: '18px', marginBottom: '8px' }}>📄 {file.name}</div>
-              <div style={{ fontSize: '14px', color: '#666' }}>
-                {(file.size / 1024 / 1024).toFixed(2)} MB
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center',
+              gap: 'var(--space-md)'
+            }}>
+              <Icon name="file" size={48} color="var(--primary)" />
+              <div>
+                <div style={{ 
+                  fontSize: 'var(--font-size-lg)', 
+                  marginBottom: 'var(--space-xs)',
+                  fontWeight: 'var(--font-weight-semibold)',
+                  color: 'var(--text-primary)'
+                }}>
+                  {file.name}
+                </div>
+                <div style={{ 
+                  fontSize: 'var(--font-size-sm)', 
+                  color: 'var(--text-secondary)'
+                }}>
+                  {(file.size / 1024 / 1024).toFixed(2)} MB
+                </div>
               </div>
             </div>
           ) : (
-            <div>
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>📎</div>
-              <div>Fayl tanlang yoki bu yerga tashlang</div>
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center',
+              gap: 'var(--space-md)'
+            }}>
+              <Icon name="upload" size={64} color="var(--text-tertiary)" />
+              <div style={{ 
+                fontSize: 'var(--font-size-base)',
+                color: 'var(--text-secondary)',
+                fontWeight: 'var(--font-weight-medium)'
+              }}>
+                Fayl tanlang yoki bu yerga tashlang
+              </div>
+              <div style={{ 
+                fontSize: 'var(--font-size-sm)',
+                color: 'var(--text-tertiary)'
+              }}>
+                PDF yoki DOCX formatida, maksimal 10MB
+              </div>
             </div>
           )}
         </div>
 
         {file && (
           <button
-            className="btn"
+            className="btn btn-primary"
             onClick={handleUpload}
             disabled={uploading}
+            style={{ marginTop: 'var(--space-lg)' }}
           >
-            {uploading ? 'Yuklanmoqda...' : 'CV ni yuklash'}
+            {uploading ? (
+              <>
+                <div className="loading-spinner" style={{ width: '18px', height: '18px', borderWidth: '2px' }}></div>
+                Yuklanmoqda...
+              </>
+            ) : (
+              <>
+                <Icon name="upload" size={18} color="white" />
+                CV ni yuklash
+              </>
+            )}
           </button>
         )}
       </div>

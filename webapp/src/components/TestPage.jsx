@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
+import Modal from './Modal'
+import { Icon } from './Icons'
 import './TestPage.css'
 
 function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
@@ -454,57 +456,88 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
   return (
     <div ref={testContainerRef} className="test-container" style={{ userSelect: 'none' }}>
       {/* Blocked Modal */}
-      {isBlocked && (
-        <div className="modal-overlay" style={{ zIndex: 10000 }}>
-          <div className="modal-content">
-            <h3>❌ Test to'xtatildi</h3>
-            <p>
-              Siz testni tark etganingiz uchun block qilindingiz va test to'xtatildi.
-            </p>
-            <p><strong>Sabab: Test tark etildi (cheating)</strong></p>
-            <div className="modal-buttons">
-              <button className="btn btn-primary" onClick={() => {
-                if (window.Telegram && window.Telegram.WebApp) {
-                  window.Telegram.WebApp.close()
-                } else {
-                  window.close()
-                }
-              }}>
-                Yopish
-              </button>
-            </div>
+      <Modal
+        isOpen={isBlocked}
+        onClose={() => {
+          if (window.Telegram && window.Telegram.WebApp) {
+            window.Telegram.WebApp.close()
+          } else {
+            window.close()
+          }
+        }}
+        title="Test to'xtatildi"
+        type="error"
+        showCloseButton={false}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+          <p style={{ color: 'var(--text-primary)' }}>
+            Siz testni tark etganingiz uchun block qilindingiz va test to'xtatildi.
+          </p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)' }}>
+            <strong>Sabab:</strong> Test tark etildi (cheating)
+          </p>
+          <div className="modal-buttons">
+            <button className="btn btn-primary" onClick={() => {
+              if (window.Telegram && window.Telegram.WebApp) {
+                window.Telegram.WebApp.close()
+              } else {
+                window.close()
+              }
+            }}>
+              Yopish
+            </button>
           </div>
         </div>
-      )}
+      </Modal>
 
       {/* User Info */}
       <div className="card user-info-card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <strong>👤 {user?.first_name} {user?.last_name}</strong>
-            {user?.position && (
-              <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                💼 {user.position.name}
-              </div>
-            )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-md)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
+            <Icon name="user" size={24} color="white" />
+            <div>
+              <strong style={{ display: 'block', fontSize: 'var(--font-size-lg)' }}>
+                {user?.first_name} {user?.last_name}
+              </strong>
+              {user?.position && (
+                <div style={{ fontSize: 'var(--font-size-sm)', opacity: 0.9, marginTop: 'var(--space-xs)', display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
+                  <Icon name="briefcase" size={14} color="white" />
+                  {user.position.name}
+                </div>
+              )}
+            </div>
           </div>
           {isTrial && (
-            <span className="trial-badge">🧪 Trial Test</span>
+            <span className="trial-badge">Trial Test</span>
           )}
         </div>
       </div>
 
       {/* Test Info */}
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-          <div>
-            <strong>{test.title}</strong>
-            <div style={{ fontSize: '14px', color: '#666', marginTop: '4px' }}>
-              Savol {currentQuestionIndex + 1} / {questions.length}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-lg)', flexWrap: 'wrap', gap: 'var(--space-md)' }}>
+          <div style={{ flex: 1 }}>
+            <strong style={{ fontSize: 'var(--font-size-lg)', display: 'block', marginBottom: 'var(--space-xs)' }}>
+              {test.title}
+            </strong>
+            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
+              <span>Savol {currentQuestionIndex + 1} / {questions.length}</span>
             </div>
           </div>
-          <div style={{ fontSize: '18px', fontWeight: 'bold', color: timeLeft < 60 ? '#dc3545' : '#229ED9' }}>
-            ⏱ {formatTime(timeLeft)}
+          <div style={{ 
+            fontSize: 'var(--font-size-xl)', 
+            fontWeight: 'var(--font-weight-bold)', 
+            color: timeLeft < 60 ? 'var(--error)' : 'var(--primary)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-xs)',
+            padding: 'var(--space-sm) var(--space-md)',
+            background: timeLeft < 60 ? 'rgba(220, 53, 69, 0.1)' : 'var(--primary-light)',
+            borderRadius: 'var(--radius-md)',
+            whiteSpace: 'nowrap'
+          }}>
+            <Icon name="clock" size={20} color={timeLeft < 60 ? 'var(--error)' : 'var(--primary)'} />
+            {formatTime(timeLeft)}
           </div>
         </div>
         
@@ -534,22 +567,33 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
       </div>
 
       {/* Navigation Buttons */}
-      <div style={{ display: 'flex', gap: '12px' }}>
+      <div style={{ display: 'flex', gap: 'var(--space-md)' }}>
         <button
           className="btn btn-secondary"
           onClick={handlePrevious}
           disabled={currentQuestionIndex === 0 || submitting}
         >
-          ← Oldingi
+          <Icon name="arrow-left" size={18} color="currentColor" />
+          Oldingi
         </button>
         
         {currentQuestionIndex === questions.length - 1 ? (
           <button
-            className="btn btn-primary"
+            className="btn btn-success"
             onClick={handleSubmit}
             disabled={submitting || !selectedAnswer}
           >
-            {submitting ? 'Yuborilmoqda...' : '✅ Testni yakunlash'}
+            {submitting ? (
+              <>
+                <div className="loading-spinner" style={{ width: '18px', height: '18px', borderWidth: '2px' }}></div>
+                Yuborilmoqda...
+              </>
+            ) : (
+              <>
+                <Icon name="check" size={18} color="white" />
+                Testni yakunlash
+              </>
+            )}
           </button>
         ) : (
           <button
@@ -557,7 +601,8 @@ function TestPage({ test, user, onComplete, apiBaseUrl, isTrial = false }) {
             onClick={handleNext}
             disabled={!selectedAnswer || submitting}
           >
-            Keyingi →
+            Keyingi
+            <Icon name="arrow-right" size={18} color="white" />
           </button>
         )}
       </div>
